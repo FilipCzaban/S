@@ -1,0 +1,3913 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>MotoSektory – F1 GPS Sector Timing</title>
+<meta name="description" content="Profesionální GPS sector timing pro motorkáře – F1 design, vlastní trasa, porovnání sektorů."/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Space+Grotesk:wght@400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --f1-red:#e10600;
+  --f1-bg:#050508;
+  --f1-surface:#0c0c12;
+  --f1-panel:#12121a;
+  --f1-border:#222230;
+  --f1-border2:#181822;
+  --f1-text:#ffffff;
+  --f1-muted:#9e9eb0;
+  --f1-dim:#5a5a70;
+  --sector-purple:#d400ff;
+  --sector-green:#00ff44;
+  --sector-yellow:#ffe600;
+  --sector-blue:#00cfff;
+  --sector-none:#333344;
+  --timing-font:'Share Tech Mono',monospace;
+  --ui-font:'Space Grotesk',sans-serif;
+  --f1-font:'Orbitron',sans-serif;
+  --carbon-pattern: 
+    linear-gradient(45deg, #07070a 25%, transparent 25%), 
+    linear-gradient(-45deg, #07070a 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #07070a 75%), 
+    linear-gradient(-45deg, transparent 75%, #07070a 75%);
+}
+
+html,body{width:100%;height:100%;overflow:hidden;background:var(--f1-bg);font-family:var(--ui-font);color:var(--f1-text)}
+
+/* ── CARBON BACKGROUND UTILITY ── */
+.carbon-panel {
+  background-color: #0c0c12;
+  background-image: var(--carbon-pattern);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+/* ── LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100vh;width:100vw;overflow:hidden}
+
+/* ── TOPBAR ── */
+#topbar{
+  display:flex;align-items:stretch;
+  height:52px;
+  background-color:#0c0c12;
+  background-image:var(--carbon-pattern);
+  background-size:8px 8px;
+  background-position:0 0, 0 4px, 4px -4px, -4px 0px;
+  border-bottom:3px solid var(--f1-red);
+  position:relative;z-index:1100;flex-shrink:0;
+  box-shadow:0 4px 25px rgba(0,0,0,0.6);
+}
+
+.tb-logo{
+  display:flex;align-items:center;gap:10px;
+  padding:0 22px;
+  border-right:1px solid var(--f1-border);
+  flex-shrink:0;
+}
+.tb-logo-emblem{
+  width:36px;height:36px;
+  background:linear-gradient(135deg, var(--f1-red), #b00500);
+  clip-path:polygon(0 0,100% 0,85% 100%,0 100%);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--f1-font);
+  font-style:italic;
+  font-weight:900;
+  font-size:18px;
+  text-shadow:0 0 8px #fff;
+  box-shadow:0 0 10px rgba(225,6,0,0.6);
+}
+.tb-logo-text{
+  display:flex;flex-direction:column;line-height:1.1;
+}
+.tb-logo-text span:first-child{
+  font-family:var(--f1-font);
+  font-style:italic;
+  font-weight:900;
+  font-size:15px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:#fff;
+  text-shadow:0 0 8px rgba(225,6,0,0.4);
+}
+.tb-logo-text span:last-child{
+  font-family:var(--ui-font);
+  font-size:8px;
+  font-weight:700;
+  letter-spacing:2.5px;
+  color:var(--f1-muted);
+  text-transform:uppercase;
+}
+
+/* SECTOR TIMING STRIP */
+#sector-strip{
+  display:flex;align-items:stretch;flex:1;gap:4px;
+  padding:0 12px;
+  border-right:1px solid var(--f1-border);
+}
+
+.sector-box{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:0 16px;
+  min-width:96px;position:relative;
+  transition:all .3s ease;
+  transform:skewX(-12deg);
+  background:rgba(18, 18, 26, 0.6);
+  border-left:2px solid var(--f1-border);
+  border-right:1px solid rgba(255,255,255,0.02);
+}
+.sector-box > * {
+  transform:skewX(12deg);
+}
+.sector-box-label{
+  font-family:var(--f1-font);
+  font-size:9px;font-weight:900;letter-spacing:1.5px;
+  color:var(--f1-muted);text-transform:uppercase;
+  margin-bottom:2px;
+}
+.sector-box-time{
+  font-family:var(--timing-font);
+  font-size:17px;font-weight:400;
+  color:var(--sector-none);
+  letter-spacing:0.5px;
+}
+.sector-box-delta{
+  font-family:var(--timing-font);
+  font-size:9px;font-weight:700;letter-spacing:0.5px;
+  color:var(--f1-dim);margin-top:1px;
+}
+.sector-box.active {
+  background:rgba(255, 255, 255, 0.08);
+  border-left-color:var(--f1-text);
+  box-shadow:inset 0 0 10px rgba(255,255,255,0.03);
+}
+.sector-box.active .sector-box-time{
+  color:var(--f1-text);
+  text-shadow:0 0 8px rgba(255,255,255,0.4);
+  animation:blink-cursor 1s step-end infinite;
+}
+.sector-box.done-purple{
+  background:rgba(212,0,255,0.15);
+  border-left-color:var(--sector-purple);
+}
+.sector-box.done-purple .sector-box-time{color:var(--sector-purple);text-shadow:0 0 12px var(--sector-purple)}
+.sector-box.done-green{
+  background:rgba(0,255,68,0.1);
+  border-left-color:var(--sector-green);
+}
+.sector-box.done-green .sector-box-time{color:var(--sector-green);text-shadow:0 0 12px var(--sector-green)}
+.sector-box.done-yellow{
+  background:rgba(255,230,0,0.1);
+  border-left-color:var(--sector-yellow);
+}
+.sector-box.done-yellow .sector-box-time{color:var(--sector-yellow);text-shadow:0 0 10px var(--sector-yellow)}
+@keyframes blink-cursor{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ACTIVE INDICATOR BAR */
+.sector-box.active::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:3px;
+  background:var(--f1-text);
+  box-shadow:0 0 8px #ffffff;
+  animation:sector-fill 10s linear;
+}
+@keyframes sector-fill{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1)}}
+
+/* LAPTIME */
+#laptime-block{
+  display:flex;align-items:center;gap:0;
+  padding:0 16px;
+  border-right:1px solid var(--f1-border);
+  flex-shrink:0;
+}
+.lap-item{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 12px}
+.lap-item-label{font-family:var(--f1-font);font-size:9px;font-weight:900;letter-spacing:1.5px;color:var(--f1-muted);text-transform:uppercase;margin-bottom:2px}
+.lap-item-value{font-family:var(--timing-font);font-size:20px;color:var(--f1-text);letter-spacing:1px}
+.lap-item-value.speed{color:var(--sector-blue);text-shadow:0 0 10px var(--sector-blue)}
+.lap-item-value.gap.ahead{color:var(--sector-purple);text-shadow:0 0 12px var(--sector-purple)}
+.lap-item-value.gap.behind{color:var(--sector-yellow);text-shadow:0 0 12px var(--sector-yellow)}
+.lap-item-value.gap.same{color:var(--f1-text)}
+.lap-sep{width:1px;height:28px;background:var(--f1-border2);align-self:center}
+
+/* MODE BUTTONS */
+#mode-strip{
+  display:flex;align-items:center;gap:10px;
+  padding:0 16px;flex-shrink:0;
+}
+
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  border:none;cursor:pointer;font-family:var(--f1-font);font-weight:900;
+  font-size:10px;letter-spacing:1.5px;text-transform:uppercase;
+  border-radius:2px;padding:8px 16px;
+  transform:skewX(-12deg);
+  transition:all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow:0 3px 10px rgba(0,0,0,0.4);
+  position:relative;
+}
+.btn > * {
+  transform:skewX(12deg);
+  display:inline-block;
+}
+.btn::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 3px; height: 100%;
+  background: var(--f1-text);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.btn:hover::before {
+  opacity: 0.85;
+}
+.btn:hover{
+  transform:translateY(-1px) skewX(-12deg);
+  box-shadow:0 5px 15px rgba(0,0,0,0.5);
+}
+.btn:active{
+  transform:translateY(1px) skewX(-12deg);
+  scale:0.98;
+}
+.btn-primary{background:linear-gradient(135deg, var(--f1-red), #b00500);border:1px solid #ff443c;color:#fff}
+.btn-primary:hover{box-shadow:0 0 20px rgba(225,6,0,.55)}
+.btn-primary::before{background:#fff}
+
+.btn-secondary{background:var(--f1-panel);border:1px solid var(--f1-border);color:var(--f1-muted)}
+.btn-secondary:hover{border-color:var(--f1-text);color:var(--f1-text);background:rgba(255,255,255,0.05)}
+.btn-secondary::before{background:var(--f1-red)}
+
+.btn-success{background:linear-gradient(135deg, #125012, #0b2e0b);border:1px solid #1eff00;color:#1eff00}
+.btn-success:hover{background:#186618;box-shadow:0 0 16px rgba(30,255,0,.45)}
+.btn-success::before{background:#1eff00}
+
+.btn-danger{background:linear-gradient(135deg, #280b0b, #150505);border:1px solid var(--f1-red);color:var(--f1-red)}
+.btn-danger:hover{background:#3a0f0f;box-shadow:0 0 16px rgba(225,6,0,.45)}
+.btn-danger::before{background:var(--f1-red)}
+
+.btn-warning{background:linear-gradient(135deg, #28210b, #151105);border:1px solid var(--sector-yellow);color:var(--sector-yellow)}
+.btn-warning:hover{background:#3a300f;box-shadow:0 0 16px rgba(255,230,0,.45)}
+.btn-warning::before{background:var(--sector-yellow)}
+
+.btn[disabled]{opacity:.25;pointer-events:none}
+
+/* ── MAIN ── */
+#main{display:flex;flex:1;overflow:hidden;position:relative}
+
+/* MAP */
+#map{flex:1;position:relative;background:#050508}
+.leaflet-container{background:#050508!important}
+.leaflet-control-zoom a{background:var(--f1-panel)!important;color:var(--f1-text)!important;border-color:var(--f1-border)!important;font-family:var(--ui-font)!important;width:34px!important;height:34px!important;line-height:34px!important;font-size:16px!important}
+.leaflet-bottom.leaflet-right{bottom:10px!important;right:10px!important}
+.leaflet-control-zoom{margin:0!important;border:1px solid var(--f1-border)!important;border-radius:4px!important;overflow:hidden!important;box-shadow:0 2px 12px rgba(0,0,0,.5)!important}
+.leaflet-control-attribution{background:rgba(10,10,15,.85)!important;color:var(--f1-dim)!important;font-size:9px!important}
+.leaflet-control-attribution a{color:var(--f1-dim)!important}
+.leaflet-popup-content-wrapper{background:var(--f1-panel)!important;border:1px solid var(--f1-border)!important;border-radius:4px!important;color:var(--f1-text)!important;box-shadow:0 4px 24px rgba(0,0,0,.8)!important}
+.leaflet-popup-tip{background:var(--f1-panel)!important}
+.leaflet-popup-content{margin:12px 16px!important;font-family:var(--ui-font)!important}
+
+/* MAP OVERLAY ELEMENTS */
+#map-mode-banner{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  z-index:700;
+  background:rgba(10,10,15,.92);
+  border:1px solid var(--f1-red);
+  border-radius:4px;padding:10px 20px;
+  font-family:var(--f1-font);
+  font-size:11px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--f1-red);
+  pointer-events:none;
+  display:none;backdrop-filter:blur(8px);
+  text-align:center;
+  box-shadow:0 4px 15px rgba(225,6,0,0.25);
+}
+
+#gps-badge{
+  position:absolute;top:12px;left:12px;z-index:700;
+  background:rgba(10,10,15,.9);border:1px solid var(--f1-border);
+  border-radius:3px;padding:6px 12px;
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--f1-font);
+  font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;
+  color:var(--f1-muted);backdrop-filter:blur(6px);
+}
+.gps-dot{width:8px;height:8px;border-radius:50%;background:var(--f1-dim);flex-shrink:0}
+.gps-dot.ok{background:var(--sector-green);box-shadow:0 0 8px var(--sector-green);animation:blink-gps 1.5s ease-in-out infinite}
+.gps-dot.wait{background:var(--sector-yellow);box-shadow:0 0 8px var(--sector-yellow)}
+.gps-dot.tracking{background:var(--f1-red);box-shadow:0 0 8px var(--f1-red);animation:blink-gps .8s ease-in-out infinite}
+@keyframes blink-gps{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* LEGEND on map */
+#map-legend{
+  position:absolute;bottom:130px;left:12px;z-index:600;
+  background:rgba(10,10,15,.88);border:1px solid var(--f1-border);
+  border-radius:4px;padding:12px;backdrop-filter:blur(8px);
+  transition:bottom 0.3s ease;
+}
+
+/* ── TELEMETRY SPEED HUD ── */
+#telemetry-hud {
+  position: absolute;
+  bottom: 20px;
+  left: 12px;
+  width: 95px;
+  height: 95px;
+  z-index: 750;
+  background: rgba(12, 12, 18, 0.85);
+  border: 1px solid var(--f1-border);
+  border-radius: 50%;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.speed-gauge {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-220deg);
+}
+
+.speed-gauge-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.05);
+  stroke-width: 5;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 0;
+  stroke-linecap: round;
+}
+
+.speed-gauge-fill {
+  fill: none;
+  stroke: var(--sector-blue);
+  stroke-width: 5;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.15s ease, stroke 0.2s ease;
+  filter: drop-shadow(0 0 5px var(--sector-blue));
+}
+
+.speed-hud-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  margin-top: -2px;
+}
+
+.speed-hud-value {
+  font-family: var(--f1-font);
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(255,255,255,0.4);
+}
+
+.speed-hud-unit {
+  font-family: var(--f1-font);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: var(--f1-muted);
+}
+.legend-row{
+  display:flex;align-items:center;gap:8px;margin-bottom:6px;
+  font-family:var(--f1-font);
+  font-size:9px;font-weight:900;letter-spacing:1px;
+  color:var(--f1-muted);text-transform:uppercase;
+}
+.legend-row:last-child{margin-bottom:0}
+.legend-bar{width:24px;height:3px;border-radius:2px}
+
+/* WAYPOINT CONTROL */
+#waypoint-controls{
+  position:absolute;bottom:30px;right:370px;z-index:700;
+  display:flex;flex-direction:column;gap:8px;
+  display:none;
+}
+
+/* SIDE PANEL */
+#side-panel{
+  width:340px;
+  background:rgba(12, 12, 18, 0.85);
+  border-left:1px solid var(--f1-border);
+  display:flex;flex-direction:column;
+  flex-shrink:0;overflow:hidden;
+  z-index:100;
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  box-shadow:-5px 0 30px rgba(0,0,0,0.6);
+}
+
+/* PANEL TAB BAR */
+#panel-tabs{
+  display:flex;
+  border-bottom:1px solid var(--f1-border);
+  flex-shrink:0;
+  background-color:#07070a;
+  background-image:var(--carbon-pattern);
+  background-size:8px 8px;
+}
+.panel-tab{
+  flex:1;padding:12px 0;
+  font-family:var(--f1-font);
+  font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--f1-dim);cursor:pointer;text-align:center;
+  border-bottom:3px solid transparent;
+  transition:all .2s;
+}
+.panel-tab:hover{color:var(--f1-text);background:rgba(255,255,255,0.02)}
+.panel-tab.active{color:var(--f1-text);border-bottom-color:var(--f1-red);background:rgba(18,18,26,0.4)}
+
+/* ROUTE INFO BAR */
+#route-info{
+  padding:10px 14px;
+  border-bottom:1px solid var(--f1-border2);
+  font-size:10px;color:var(--f1-muted);
+  display:flex;align-items:center;gap:12px;
+  flex-shrink:0;background:var(--f1-panel);
+}
+.ri-item{display:flex;flex-direction:column;gap:2px}
+.ri-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--f1-dim)}
+.ri-value{font-family:var(--timing-font);font-size:14px;color:var(--f1-text)}
+
+/* SECTORS TAB */
+#tab-sectors,#tab-history,#tab-settings{
+  flex:1;overflow-y:auto;display:flex;flex-direction:column;
+}
+#tab-sectors::-webkit-scrollbar,#tab-history::-webkit-scrollbar{width:3px}
+#tab-sectors::-webkit-scrollbar-thumb,#tab-history::-webkit-scrollbar-thumb{background:var(--f1-border)}
+
+/* SECTOR ITEM */
+.sector-item{
+  border-bottom:1px solid var(--f1-border2);
+  display:flex;align-items:stretch;
+  position:relative;overflow:hidden;
+  transition:background .2s;
+}
+.sector-item:hover{background:rgba(255,255,255,.02)}
+.sector-item.live{background:rgba(0,210,255,.04);border-bottom-color:rgba(0,210,255,.15)}
+
+.si-left{
+  width:4px;flex-shrink:0;
+  background:var(--sector-none);
+}
+.sector-item.live .si-left{background:var(--sector-blue)}
+.sector-item.col-purple .si-left{background:var(--sector-purple);box-shadow:0 0 8px var(--sector-purple)}
+.sector-item.col-green .si-left{background:var(--sector-green);box-shadow:0 0 8px var(--sector-green)}
+.sector-item.col-yellow .si-left{background:var(--sector-yellow);box-shadow:0 0 8px var(--sector-yellow)}
+
+.si-body{flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.si-top{display:flex;align-items:center;justify-content:space-between}
+.si-num{
+  font-size:10px;font-weight:700;letter-spacing:2px;
+  text-transform:uppercase;color:var(--f1-muted);
+}
+.si-num-badge{
+  display:inline-block;
+  background:var(--f1-border);
+  border-radius:2px;padding:2px 7px;
+  font-size:9px;letter-spacing:1px;color:var(--f1-muted);
+}
+.sector-item.live .si-num-badge{background:rgba(0,210,255,.15);color:var(--sector-blue);animation:blink-cursor 1s step-end infinite}
+.si-time{font-family:var(--timing-font);font-size:22px;color:var(--f1-text);letter-spacing:1px}
+.sector-item.col-purple .si-time{color:var(--sector-purple);text-shadow:0 0 14px var(--sector-purple)}
+.sector-item.col-green .si-time{color:var(--sector-green);text-shadow:0 0 14px var(--sector-green)}
+.sector-item.col-yellow .si-time{color:var(--sector-yellow);text-shadow:0 0 12px var(--sector-yellow)}
+.sector-item.live .si-time{color:var(--sector-blue);text-shadow:0 0 12px var(--sector-blue)}
+
+.si-bottom{display:flex;gap:16px;margin-top:2px}
+.si-detail{display:flex;flex-direction:column;gap:1px}
+.si-detail-label{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:var(--f1-dim)}
+.si-detail-value{font-size:11px;font-weight:600;color:var(--f1-muted)}
+.si-delta{font-size:11px;font-weight:700}
+.delta-faster{color:var(--sector-purple);text-shadow:0 0 8px var(--sector-purple)}
+.delta-same{color:var(--sector-green);text-shadow:0 0 8px var(--sector-green)}
+.delta-slower{color:var(--sector-yellow);text-shadow:0 0 8px var(--sector-yellow)}
+
+/* EMPTY STATE */
+.empty-panel{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;padding:40px 24px;text-align:center;
+}
+.empty-panel-icon{font-size:40px;opacity:.25}
+.empty-panel-title{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--f1-muted)}
+.empty-panel-text{font-size:11px;color:var(--f1-dim);line-height:1.7}
+
+/* HISTORY */
+.history-item{
+  border-bottom:1px solid var(--f1-border2);
+  padding:14px 16px;cursor:pointer;
+  transition:background .15s;
+}
+.history-item:hover{background:rgba(255,255,255,.03)}
+.history-item.compare-active{background:rgba(212,0,255,.07);border-left:3px solid var(--sector-purple)}
+.hi-name{font-size:13px;font-weight:700;margin-bottom:4px}
+.hi-meta{font-size:10px;color:var(--f1-muted);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.hi-sectors{display:flex;gap:3px;margin-bottom:10px}
+.hi-s{
+  flex:1;height:18px;border-radius:2px;
+  background:var(--f1-border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:8px;font-weight:700;letter-spacing:1px;color:var(--f1-dim);
+  font-family:var(--timing-font);
+}
+.hi-actions{display:flex;gap:8px}
+.btn-xs{
+  padding:4px 10px;font-size:9px;letter-spacing:1px;text-transform:uppercase;font-weight:700;
+  border-radius:2px;border:none;cursor:pointer;font-family:var(--ui-font);
+}
+.btnx-cmp{background:rgba(212,0,255,.15);border:1px solid rgba(212,0,255,.3);color:var(--sector-purple)}
+.btnx-del{background:rgba(225,6,0,.1);border:1px solid rgba(225,6,0,.25);color:var(--f1-red)}
+.btnx-view{background:var(--f1-panel);border:1px solid var(--f1-border);color:var(--f1-muted)}
+
+/* SAVED ROUTES */
+.route-item{
+  border-bottom:1px solid var(--f1-border2);
+  padding:14px 16px;
+  cursor:pointer;
+  transition:background .15s, border-color .15s;
+  background:var(--f1-panel);
+  border-radius:4px;
+  margin-bottom:8px;
+  border:1px solid var(--f1-border);
+}
+.route-item:hover{background:rgba(255,255,255,.02);border-color:var(--sector-blue)}
+.route-item.active{border-color:var(--sector-green);background:rgba(0,255,68,0.02)}
+.ri-name{font-size:13px;font-weight:700;margin-bottom:4px;color:var(--f1-text)}
+.ri-meta{font-size:10px;color:var(--f1-muted);display:flex;gap:14px;flex-wrap:wrap}
+.ri-actions{display:flex;gap:8px;margin-top:10px}
+
+/* SETTINGS TAB */
+#tab-settings{padding:16px;gap:14px}
+.setting-group{display:flex;flex-direction:column;gap:8px}
+.setting-label{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--f1-muted)}
+.setting-control{
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:3px;padding:8px 12px;
+  font-family:var(--ui-font);font-size:13px;font-weight:600;
+  color:var(--f1-text);outline:none;width:100%;
+  transition:border-color .2s;
+}
+.setting-control:focus{border-color:var(--f1-red)}
+.setting-control option{background:var(--f1-panel)}
+.setting-hint{font-size:10px;color:var(--f1-dim);line-height:1.5}
+
+/* STATUS FOOTER */
+#status-bar{
+  padding:7px 14px;border-top:1px solid var(--f1-border2);
+  display:flex;align-items:center;gap:8px;
+  font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--f1-dim);flex-shrink:0;background:var(--f1-panel);
+}
+
+/* TOAST */
+#toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:3px;padding:10px 20px;
+  font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  color:var(--f1-text);z-index:9999;opacity:0;
+  transition:opacity .25s,transform .25s;pointer-events:none;
+  text-align:center;white-space:nowrap;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.toast-red{border-color:var(--f1-red);color:var(--f1-red)}
+#toast.toast-green{border-color:var(--sector-green);color:var(--sector-green)}
+#toast.toast-purple{border-color:var(--sector-purple);color:var(--sector-purple)}
+#toast.toast-yellow{border-color:var(--sector-yellow);color:var(--sector-yellow)}
+
+/* MODAL */
+#modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .2s;backdrop-filter:blur(4px);
+}
+#modal-bg.open{opacity:1;pointer-events:auto}
+.modal{
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-top:2px solid var(--f1-red);
+  border-radius:4px;padding:28px;max-width:340px;width:90%;
+  display:flex;flex-direction:column;gap:16px;
+}
+.modal-title{font-size:14px;font-weight:900;letter-spacing:2px;text-transform:uppercase}
+.modal-body{font-size:12px;color:var(--f1-muted);line-height:1.7}
+.modal-btns{display:flex;gap:10px}
+.modal-btns .btn{flex:1;justify-content:center}
+
+/* GPS MARKER */
+.gps-marker-outer{
+  width:24px;height:24px;border-radius:50%;
+  background:rgba(0,210,255,.2);
+  display:flex;align-items:center;justify-content:center;
+  animation:gps-pulse 2s ease-out infinite;
+}
+.gps-marker-inner{
+  width:12px;height:12px;border-radius:50%;
+  background:var(--sector-blue);border:2px solid #fff;
+  box-shadow:0 0 12px var(--sector-blue);
+}
+@keyframes gps-pulse{
+  0%{box-shadow:0 0 0 0 rgba(0,210,255,.5)}
+  70%{box-shadow:0 0 0 16px rgba(0,210,255,0)}
+  100%{box-shadow:0 0 0 0 rgba(0,210,255,0)}
+}
+
+/* WAYPOINT MARKER */
+.wp-marker{
+  width:12px;height:12px;border-radius:50%;
+  background:var(--f1-red);border:2px solid rgba(255,255,255,.4);
+  box-shadow:0 0 8px rgba(225,6,0,.6);
+  cursor:grab;
+}
+
+/* SECTOR BOUNDARY MARKER */
+.sb-marker{
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:900;font-family:var(--timing-font);
+  width:28px;height:28px;border-radius:3px;
+  border:2px solid rgba(255,255,255,.2);
+  box-shadow:0 2px 12px rgba(0,0,0,.6);
+  color:#000;
+  letter-spacing:0;
+}
+
+/* FINISH LINE MARKER (Fallback) */
+.finish-marker{
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,#fff 25%,#000 25%,#000 50%,#fff 50%,#fff 75%,#000 75%);
+  border:2px solid rgba(255,255,255,.3);
+  box-shadow:0 2px 12px rgba(0,0,0,.6);
+}
+
+/* ── F1 TIMING & TELEMETRY GLOWS ── */
+.f1-track-glow {
+  filter: drop-shadow(0 0 8px rgba(225, 6, 0, 0.5));
+}
+.f1-live-glow-cyan {
+  filter: drop-shadow(0 0 10px rgba(0, 207, 255, 0.7));
+  stroke-dasharray: 12 6;
+  animation: flow-active 1.5s linear infinite;
+}
+.f1-live-glow-purple {
+  filter: drop-shadow(0 0 10px rgba(212, 0, 255, 0.7));
+  stroke-dasharray: 12 6;
+  animation: flow-active 1.5s linear infinite;
+}
+@keyframes flow-active {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+.f1-sector-glow-purple {
+  filter: drop-shadow(0 0 8px rgba(212, 0, 255, 0.6));
+}
+.f1-sector-glow-green {
+  filter: drop-shadow(0 0 8px rgba(0, 255, 68, 0.6));
+}
+.f1-sector-glow-yellow {
+  filter: drop-shadow(0 0 8px rgba(255, 230, 0, 0.6));
+}
+.f1-sector-glow-blue {
+  filter: drop-shadow(0 0 8px rgba(0, 207, 255, 0.6));
+}
+
+/* HIGH-TECH CORNER BADGES */
+.corner-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #12121a;
+  border: 1px solid var(--f1-red);
+  color: #ffffff;
+  font-family: var(--f1-font);
+  font-size: 8px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 6px rgba(225, 6, 0, 0.5);
+  pointer-events: none;
+}
+
+/* CUSTOM START & FINISH CIRCLES */
+.f1-start-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #0c0c12;
+  border: 2px solid var(--sector-green);
+  color: var(--sector-green);
+  font-family: var(--f1-font);
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px rgba(0, 255, 68, 0.5);
+  text-shadow: 0 0 4px var(--sector-green);
+}
+.f1-finish-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#ffffff 0% 25%, #12121a 0% 50%) 50% / 6px 6px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.5);
+}
+
+.wp-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--f1-red);border:2px solid rgba(255,255,255,.5);
+  box-shadow:0 0 6px rgba(225,6,0,.7);
+}
+.wp-dot.first{background:#1eff00;box-shadow:0 0 6px rgba(30,255,0,.7)}
+
+/* PROGRESS ON SECTOR */
+#sector-progress{
+  position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:var(--f1-border);z-index:600;
+  display:none;
+}
+#sector-progress-bar{
+  height:100%;background:var(--sector-blue);
+  width:0%;transition:width .3s linear;
+}
+
+/* RECORDING BADGE */
+#rec-badge{
+  position:absolute;top:12px;right:360px;z-index:700;
+  display:none;align-items:center;gap:8px;
+  background:rgba(225,6,0,.15);border:1px solid var(--f1-red);
+  border-radius:3px;padding:6px 14px;
+  font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--f1-red);backdrop-filter:blur(6px);
+}
+#rec-badge.active{display:flex}
+#rec-badge .rec-dot{width:8px;height:8px;border-radius:50%;background:var(--f1-red);animation:blink-gps .7s ease-in-out infinite}
+
+/* LOCATE BUTTON – sits above the zoom control (bottomright) */
+#btn-locate{
+  position:absolute;
+  /* zoom control is ~80px tall at bottomright:10px, so locate sits 10px above it */
+  bottom:100px;right:10px;
+  z-index:700;
+  width:34px;height:34px;
+  background:var(--f1-panel);
+  border:1px solid var(--f1-border);
+  border-radius:4px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  font-size:16px;
+  transition:background .2s,border-color .2s,transform .15s,box-shadow .2s;
+  backdrop-filter:blur(6px);
+  box-shadow:0 2px 12px rgba(0,0,0,.5);
+}
+#btn-locate:hover{
+  background:var(--f1-surface);
+  border-color:var(--sector-blue);
+  box-shadow:0 0 16px rgba(0,210,255,.3);
+}
+#btn-locate:active{transform:scale(.92)}
+#btn-locate.locating{
+  border-color:var(--sector-blue);
+  animation:locate-pulse 1s ease-in-out infinite;
+}
+@keyframes locate-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(0,210,255,.5)}
+  50%{box-shadow:0 0 0 8px rgba(0,210,255,0)}
+}
+
+/* IDLE GPS MARKER (always visible) */
+.idle-gps-outer{
+  width:22px;height:22px;border-radius:50%;
+  background:rgba(0,210,255,.15);
+  display:flex;align-items:center;justify-content:center;
+  animation:gps-pulse 2.5s ease-out infinite;
+  pointer-events:none;
+}
+.idle-gps-inner{
+  width:11px;height:11px;border-radius:50%;
+  background:var(--sector-blue);
+  border:2px solid rgba(255,255,255,.9);
+  box-shadow:0 0 10px var(--sector-blue);
+}
+/* Accuracy circle Leaflet */
+.leaflet-accuracy-circle{
+  stroke:var(--sector-blue);
+  stroke-width:1;
+  fill:rgba(0,210,255,.06);
+  stroke-dasharray:4 3;
+}
+
+/* ══ ROUTE PLANNER PANEL ══════════════════════════════════ */
+#route-planner{
+  position:absolute;
+  top:0;left:0;bottom:0;
+  width:340px;
+  background:var(--f1-surface);
+  border-right:1px solid var(--f1-border);
+  z-index:800;
+  display:flex;flex-direction:column;
+  transform:translateX(-100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  overflow:hidden;
+}
+#route-planner.open{transform:translateX(0)}
+
+.rp-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;
+  border-bottom:2px solid var(--f1-red);
+  flex-shrink:0;
+  background:var(--f1-panel);
+}
+.rp-title{font-size:12px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--f1-text)}
+.rp-close{
+  background:none;border:none;color:var(--f1-muted);cursor:pointer;
+  font-size:18px;line-height:1;padding:4px;transition:color .2s;
+}
+.rp-close:hover{color:var(--f1-text)}
+
+.rp-body{
+  flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:0;
+  padding:14px;
+}
+.rp-body::-webkit-scrollbar{width:3px}
+.rp-body::-webkit-scrollbar-thumb{background:var(--f1-border)}
+
+.rp-input-group{
+  display:flex;flex-direction:column;gap:5px;
+  margin-bottom:10px;
+  position:relative;
+}
+.rp-input-label{
+  font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--f1-dim);display:flex;align-items:center;gap:6px;
+}
+.rp-input-row{display:flex;gap:6px;align-items:stretch}
+.rp-input{
+  flex:1;background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:3px;padding:9px 12px;
+  font-family:var(--ui-font);font-size:12px;font-weight:600;
+  color:var(--f1-text);outline:none;transition:border-color .2s;
+}
+.rp-input:focus{border-color:var(--f1-red)}
+.rp-input::placeholder{color:var(--f1-dim)}
+.rp-loc-btn{
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:3px;padding:0 10px;
+  cursor:pointer;font-size:14px;color:var(--f1-muted);
+  transition:border-color .2s,color .2s;
+  flex-shrink:0;
+}
+.rp-loc-btn:hover{border-color:var(--sector-blue);color:var(--sector-blue)}
+
+.rp-suggestions{
+  position:absolute;top:100%;left:0;right:0;
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-top:none;border-radius:0 0 4px 4px;
+  z-index:900;display:none;flex-direction:column;
+  max-height:180px;overflow-y:auto;
+}
+.rp-suggestions.open{display:flex}
+.rp-suggestion{
+  padding:9px 12px;cursor:pointer;
+  font-size:11px;font-weight:600;color:var(--f1-muted);
+  border-bottom:1px solid var(--f1-border2);
+  transition:background .15s,color .15s;
+  line-height:1.4;
+}
+.rp-suggestion:last-child{border-bottom:none}
+.rp-suggestion:hover{background:rgba(255,255,255,.04);color:var(--f1-text)}
+.rp-suggestion-sub{font-size:9px;color:var(--f1-dim);margin-top:2px}
+
+.rp-divider{
+  display:flex;align-items:center;justify-content:center;
+  padding:4px 0 8px;
+  position:relative;
+}
+.rp-swap-btn{
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:50%;width:28px;height:28px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:14px;color:var(--f1-muted);
+  transition:all .2s;
+}
+.rp-swap-btn:hover{border-color:var(--f1-red);color:var(--f1-red);transform:rotate(180deg)}
+
+#rp-search-btn{
+  width:100%;justify-content:center;
+  margin-bottom:16px;
+  padding:10px;
+  font-size:12px;
+}
+
+/* Route alternatives */
+.rp-results-title{
+  font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--f1-dim);margin-bottom:10px;padding-bottom:8px;
+  border-bottom:1px solid var(--f1-border2);
+}
+.rp-route-card{
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:4px;padding:12px 14px;
+  margin-bottom:8px;cursor:pointer;
+  transition:border-color .2s,background .2s,transform .15s;
+  position:relative;overflow:hidden;
+}
+.rp-route-card:hover{border-color:var(--sector-blue);transform:translateX(2px)}
+.rp-route-card.selected{border-color:var(--sector-green);background:rgba(30,255,0,.04)}
+.rp-route-card::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:var(--f1-border);
+}
+.rp-route-card.selected::before{background:var(--sector-green)}
+.rp-route-card:hover::before{background:var(--sector-blue)}
+
+.rp-rc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.rp-rc-num{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--f1-muted)}
+.rp-rc-badge{
+  font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  padding:2px 8px;border-radius:2px;
+  background:var(--f1-border);color:var(--f1-dim);
+}
+.rp-route-card.selected .rp-rc-badge{background:rgba(30,255,0,.15);color:var(--sector-green)}
+.rp-rc-stats{display:flex;gap:12px;margin-top:6px}
+.rp-rc-stat{display:flex;flex-direction:column;gap:2px}
+.rp-rc-stat-label{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--f1-dim)}
+.rp-rc-stat-val{font-family:var(--timing-font);font-size:14px;color:var(--f1-text)}
+.rp-rc-sectors{font-size:10px;color:var(--f1-dim);margin-top:5px}
+
+.rp-use-btn{
+  width:100%;justify-content:center;
+  margin-top:4px;padding:8px;
+  font-size:11px;
+}
+
+.rp-loading{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:24px;color:var(--f1-muted);
+  font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+}
+.rp-spinner{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid var(--f1-border);border-top-color:var(--f1-red);
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.rp-error{
+  padding:16px;text-align:center;
+  font-size:11px;color:var(--f1-red);
+  font-weight:700;letter-spacing:1px;text-transform:uppercase;
+}
+
+/* Preview polylines for route alternatives */
+
+/* SECTOR MODE BUTTONS */
+.smode-btn{
+  flex:1;padding:8px 0;
+  background:var(--f1-panel);border:none;
+  font-family:var(--ui-font);font-size:10px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;
+  color:var(--f1-dim);cursor:pointer;
+  transition:background .15s,color .15s;
+  border-right:1px solid var(--f1-border);
+}
+.smode-btn:last-child{border-right:none}
+.smode-btn.smode-active{
+  background:var(--f1-red);color:#fff;
+}
+.smode-btn:not(.smode-active):hover{background:rgba(255,255,255,.04);color:var(--f1-muted)}
+
+/* +/- COUNTER BUTTONS */
+.scount-btn{
+  width:44px;height:52px;
+  background:var(--f1-panel);border:1px solid var(--f1-border);
+  border-radius:3px;
+  font-size:22px;font-weight:700;
+  color:var(--f1-muted);cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.scount-btn:hover{background:var(--f1-surface);border-color:var(--f1-red);color:var(--f1-red)}
+.scount-btn:active{transform:scale(.93)}
+
+/* ══ RESULTS OVERLAY ══════════════════════════════════ */
+#results-overlay{
+  position:fixed;inset:0;z-index:9500;
+  background:rgba(5,5,10,.92);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity .35s;
+  backdrop-filter:blur(10px);
+  padding:16px;
+}
+#results-overlay.open{opacity:1;pointer-events:auto}
+
+.results-box{
+  background:var(--f1-surface);
+  border:1px solid var(--f1-border);
+  border-top:3px solid var(--f1-red);
+  border-radius:6px;
+  width:100%;max-width:560px;
+  max-height:90vh;overflow-y:auto;
+  display:flex;flex-direction:column;
+  box-shadow:0 24px 80px rgba(0,0,0,.8);
+}
+.results-box::-webkit-scrollbar{width:3px}
+.results-box::-webkit-scrollbar-thumb{background:var(--f1-border)}
+
+.res-header{
+  padding:20px 24px 16px;
+  border-bottom:1px solid var(--f1-border);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.res-title{
+  font-size:11px;font-weight:900;letter-spacing:3px;
+  text-transform:uppercase;color:var(--f1-muted);
+}
+.res-name{
+  font-size:18px;font-weight:900;margin-top:2px;
+  color:var(--f1-text);
+}
+.res-close{
+  background:none;border:none;color:var(--f1-muted);
+  cursor:pointer;font-size:22px;padding:4px;
+  transition:color .2s;
+}
+.res-close:hover{color:var(--f1-text)}
+
+/* TOTALS STRIP */
+.res-totals{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  background:var(--f1-panel);
+  border-bottom:1px solid var(--f1-border);
+}
+.res-total-item{
+  padding:14px 20px;
+  border-right:1px solid var(--f1-border2);
+  display:flex;flex-direction:column;gap:3px;
+}
+.res-total-item:last-child{border-right:none}
+.res-total-label{
+  font-size:8px;font-weight:700;letter-spacing:2px;
+  text-transform:uppercase;color:var(--f1-dim);
+}
+.res-total-value{
+  font-family:var(--timing-font);font-size:22px;
+  color:var(--f1-text);letter-spacing:1px;
+}
+.res-total-sub{font-size:9px;color:var(--f1-dim)}
+
+/* SECTOR TABLE */
+.res-sectors-title{
+  padding:14px 24px 8px;
+  font-size:9px;font-weight:700;letter-spacing:2px;
+  text-transform:uppercase;color:var(--f1-dim);
+  border-bottom:1px solid var(--f1-border2);
+}
+.res-sector-row{
+  display:flex;align-items:stretch;
+  border-bottom:1px solid var(--f1-border2);
+  transition:background .15s;
+}
+.res-sector-row:hover{background:rgba(255,255,255,.02)}
+.res-sector-row:last-child{border-bottom:none}
+
+.res-sr-bar{
+  width:4px;flex-shrink:0;
+  background:var(--sector-none);
+}
+.res-sr-bar.col-purple{background:var(--sector-purple);box-shadow:0 0 8px var(--sector-purple)}
+.res-sr-bar.col-green {background:var(--sector-green);box-shadow:0 0 8px var(--sector-green)}
+.res-sr-bar.col-yellow{background:var(--sector-yellow);box-shadow:0 0 8px var(--sector-yellow)}
+.res-sr-bar.col-blue  {background:var(--sector-blue);box-shadow:0 0 8px var(--sector-blue)}
+
+.res-sr-body{
+  flex:1;padding:12px 20px;
+  display:flex;align-items:center;gap:0;
+}
+.res-sr-num{
+  width:80px;flex-shrink:0;
+  font-size:11px;font-weight:700;letter-spacing:1px;
+  color:var(--f1-muted);text-transform:uppercase;
+}
+.res-sr-time{
+  flex:1;
+  font-family:var(--timing-font);font-size:20px;
+  letter-spacing:1px;
+}
+.res-sr-time.col-purple{color:var(--sector-purple);text-shadow:0 0 16px var(--sector-purple)}
+.res-sr-time.col-green {color:var(--sector-green);text-shadow:0 0 16px var(--sector-green)}
+.res-sr-time.col-yellow{color:var(--sector-yellow);text-shadow:0 0 14px var(--sector-yellow)}
+.res-sr-time.col-blue  {color:var(--sector-blue);text-shadow:0 0 14px var(--sector-blue)}
+.res-sr-time.col-none  {color:var(--f1-text)}
+
+.res-sr-delta{
+  font-size:12px;font-weight:700;font-family:var(--timing-font);
+  min-width:80px;text-align:right;
+}
+.res-sr-delta.col-purple{color:var(--sector-purple);text-shadow:0 0 8px var(--sector-purple)}
+.res-sr-delta.col-green {color:var(--sector-green);text-shadow:0 0 8px var(--sector-green)}
+.res-sr-delta.col-yellow{color:var(--sector-yellow);text-shadow:0 0 8px var(--sector-yellow)}
+.res-sr-delta.col-none  {color:var(--f1-dim)}
+.res-sr-prev{
+  font-size:10px;color:var(--f1-dim);
+  font-family:var(--timing-font);
+  min-width:72px;text-align:right;margin-right:8px;
+}
+
+/* GAP ROW */
+.res-gap-row{
+  padding:12px 24px;
+  background:var(--f1-panel);
+  display:flex;align-items:center;justify-content:space-between;
+  border-top:1px solid var(--f1-border);
+  font-size:12px;color:var(--f1-muted);
+}
+.res-gap-val{
+  font-family:var(--timing-font);font-size:16px;font-weight:700;
+}
+.res-gap-val.ahead {color:var(--sector-purple);text-shadow:0 0 12px var(--sector-purple)}
+.res-gap-val.behind{color:var(--sector-yellow);text-shadow:0 0 12px var(--sector-yellow)}
+.res-gap-val.same  {color:var(--sector-green);text-shadow:0 0 12px var(--sector-green)}
+
+/* FOOTER BUTTONS */
+.res-footer{
+  display:flex;gap:10px;
+  padding:16px 24px;
+  border-top:1px solid var(--f1-border);
+  flex-shrink:0;
+}
+
+/* ══ RESPONSIVE MOBILE LAYOUT ════════════════════════════ */
+@media (max-width: 768px) {
+  /* topbar adjustments */
+  #topbar {
+    height: 48px;
+    padding: 0 4px;
+    justify-content: space-between;
+  }
+  .tb-logo-text {
+    display: none !important;
+  }
+  .tb-logo {
+    padding: 0 6px;
+    border-right: none;
+  }
+  #sector-strip {
+    border-right: none;
+    gap: 2px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  #sector-strip::-webkit-scrollbar {
+    display: none;
+  }
+  .sector-box {
+    padding: 0 6px;
+    min-width: 65px;
+    flex-shrink: 0;
+  }
+  .sector-box-label {
+    font-size: 8px;
+  }
+  .sector-box-time {
+    font-size: 14px;
+  }
+  #laptime-block {
+    padding: 0 6px;
+    border-right: none;
+  }
+  .lap-item {
+    padding: 0 4px;
+  }
+  .lap-item-label {
+    font-size: 8px;
+  }
+  .lap-item-value {
+    font-size: 15px !important;
+  }
+  .lap-sep {
+    height: 20px;
+  }
+
+  /* Mode strip absolute positioning floating above map */
+  #mode-strip {
+    position: fixed;
+    bottom: 295px;
+    left: 10px;
+    right: 10px;
+    z-index: 850;
+    background: rgba(10, 10, 15, 0.95);
+    border: 1px solid var(--f1-border);
+    border-radius: 6px;
+    padding: 8px;
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #mode-strip .btn {
+    padding: 6px 10px;
+    font-size: 9px;
+    flex: 1;
+    min-width: 80px;
+    justify-content: center;
+  }
+
+  /* Main layout changes */
+  #main {
+    flex-direction: column;
+  }
+  #side-panel {
+    width: 100%;
+    height: 280px;
+    border-left: none;
+    border-top: 2px solid var(--f1-red);
+  }
+  #map {
+    width: 100%;
+  }
+
+  /* Map overlay overlays */
+  #gps-badge {
+    top: 8px;
+    left: 8px;
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+  #rec-badge {
+    top: 8px;
+    right: 8px;
+    padding: 4px 10px;
+    font-size: 9px;
+  }
+  #map-mode-banner {
+    top: 45px;
+    padding: 6px 12px;
+    font-size: 10px;
+    width: 90%;
+  }
+  
+  /* Zoom controls and locate button positions shifted to top-right to avoid bottom sheet overlaps */
+  .leaflet-right {
+    top: 50px !important;
+    bottom: auto !important;
+  }
+  #btn-locate {
+    top: 130px !important;
+    bottom: auto !important;
+    right: 10px !important;
+  }
+  #map-legend {
+    top: 50px !important;
+    bottom: auto !important;
+    left: 8px !important;
+    padding: 8px;
+    font-size: 8px;
+  }
+
+  /* Route Planner cover screen */
+  #route-planner {
+    width: 100%;
+    border-right: none;
+    z-index: 1200;
+  }
+
+  /* Results screen adjustments (bottom sheet format) */
+  #results-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .results-box {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 12px 12px 0 0;
+    max-height: 92vh;
+  }
+  .res-totals {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .res-total-item {
+    padding: 8px 12px;
+  }
+  .res-total-value {
+    font-size: 18px;
+  }
+  
+  .modal {
+    width: 90%;
+    max-width: 320px;
+    padding: 20px;
+  }
+  
+  .leaflet-control-attribution {
+    font-size: 7px !important;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ TOPBAR ═══ -->
+<div id="topbar">
+  <!-- Sector timing boxes (filled dynamically) -->
+  <div id="sector-strip">
+    <!-- rendered by JS -->
+  </div>
+
+  <!-- Lap metrics -->
+  <div id="laptime-block">
+    <div class="lap-item">
+      <div class="lap-item-label">Čas kola</div>
+      <div class="lap-item-value" id="m-laptime" style="font-size:16px">--:--.---</div>
+    </div>
+    <div class="lap-sep"></div>
+    <div class="lap-item">
+      <div class="lap-item-label">Rychlost</div>
+      <div class="lap-item-value speed" id="m-speed">0</div>
+    </div>
+    <div class="lap-sep"></div>
+    <div class="lap-item">
+      <div class="lap-item-label">Delta</div>
+      <div class="lap-item-value gap same" id="m-gap">--</div>
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div id="mode-strip">
+    <button id="btn-plan" class="btn btn-secondary">🗺 Plánovat trasu</button>
+    <button id="btn-setup" class="btn btn-secondary">✏ Kreslit</button>
+    <button id="btn-clear-route" class="btn btn-secondary" disabled>⌫ Smazat</button>
+    <button id="btn-start" class="btn btn-success" disabled>▶ Start GPS</button>
+    <button id="btn-stop" class="btn btn-danger" style="display:none">■ Stop</button>
+    <button id="btn-demo" class="btn btn-warning">⚡ Demo</button>
+  </div>
+</div>
+
+<!-- ═══ MAIN ═══ -->
+<div id="main">
+
+  <!-- ROUTE PLANNER PANEL -->
+  <div id="route-planner">
+    <div class="rp-header">
+      <div class="rp-title">🗺 Plánovat trasu</div>
+      <button class="rp-close" id="rp-close-btn">✕</button>
+    </div>
+    <div class="rp-body">
+
+      <!-- FROM -->
+      <div class="rp-input-group" id="rp-from-group">
+        <div class="rp-input-label">📍 Odkud</div>
+        <div class="rp-input-row">
+          <input class="rp-input" id="rp-from" placeholder="Zadej startovní místo…" autocomplete="off"/>
+          <button class="rp-loc-btn" id="rp-from-loc" title="Použít mou polohu">⊕</button>
+        </div>
+        <div class="rp-suggestions" id="rp-from-sugg"></div>
+      </div>
+
+      <!-- SWAP -->
+      <div class="rp-divider">
+        <button class="rp-swap-btn" id="rp-swap" title="Prohodit">⇅</button>
+      </div>
+
+      <!-- TO -->
+      <div class="rp-input-group" id="rp-to-group">
+        <div class="rp-input-label">🏁 Kam</div>
+        <div class="rp-input-row">
+          <input class="rp-input" id="rp-to" placeholder="Zadej cíl…" autocomplete="off"/>
+          <button class="rp-loc-btn" id="rp-to-loc" title="Použít mou polohu">⊕</button>
+        </div>
+        <div class="rp-suggestions" id="rp-to-sugg"></div>
+      </div>
+
+      <button class="btn btn-primary" id="rp-search-btn">🔍 Hledat trasy</button>
+
+      <!-- Results -->
+      <div id="rp-results"></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map">
+    <!-- Map mode banner -->
+    <div id="map-mode-banner">Klikej na mapu pro přidání bodů trasy</div>
+
+    <!-- GPS badge -->
+    <div id="gps-badge">
+      <div class="gps-dot" id="gps-dot"></div>
+      <span id="gps-text">GPS Inicializace…</span>
+    </div>
+
+    <!-- LOCATE ME BUTTON -->
+    <div id="btn-locate" title="Přejít na mou polohu">📍</div>
+
+    <!-- Rec badge -->
+    <div id="rec-badge">
+      <div class="rec-dot"></div>
+      REC
+    </div>
+
+    <!-- Legend -->
+    <div id="map-legend">
+      <div class="legend-row"><div class="legend-bar" style="background:var(--sector-purple)"></div>Rychlejší</div>
+      <div class="legend-row"><div class="legend-bar" style="background:var(--sector-green)"></div>Podobný ±5%</div>
+      <div class="legend-row"><div class="legend-bar" style="background:var(--sector-yellow)"></div>Pomalejší</div>
+      <div class="legend-row"><div class="legend-bar" style="background:var(--sector-blue);animation:none"></div>Aktivní</div>
+      <div class="legend-row"><div class="legend-bar" style="background:var(--f1-red)"></div>Trasa</div>
+    </div>
+
+    <!-- Telemetry HUD Speedometer -->
+    <div id="telemetry-hud">
+      <svg class="speed-gauge" viewBox="0 0 100 100">
+        <circle class="speed-gauge-bg" cx="50" cy="50" r="42"></circle>
+        <circle class="speed-gauge-fill" id="hud-gauge-fill" cx="50" cy="50" r="42"></circle>
+      </svg>
+      <div class="speed-hud-content">
+        <span class="speed-hud-value" id="hud-speed">0</span>
+        <span class="speed-hud-unit">km/h</span>
+      </div>
+    </div>
+
+    <!-- Sector progress bar -->
+    <div id="sector-progress"><div id="sector-progress-bar"></div></div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div id="side-panel">
+    <!-- Tabs -->
+    <div id="panel-tabs">
+      <div class="panel-tab active" data-tab="sectors">Sektory</div>
+      <div class="panel-tab" data-tab="routes">Trasy</div>
+      <div class="panel-tab" data-tab="history">Historie</div>
+      <div class="panel-tab" data-tab="settings">Nastavení</div>
+    </div>
+
+    <!-- Route info -->
+    <div id="route-info">
+      <div class="ri-item"><div class="ri-label">Trasa</div><div class="ri-value" id="ri-km">—</div></div>
+      <div class="ri-item"><div class="ri-label">Sektorů</div><div class="ri-value" id="ri-sectors">—</div></div>
+      <div class="ri-item"><div class="ri-label">Km/sektor</div><div class="ri-value" id="ri-km-sector">—</div></div>
+      <div class="ri-item"><div class="ri-label">Stav</div><div class="ri-value" id="ri-status" style="color:var(--f1-dim)">Není trasa</div></div>
+    </div>
+
+    <!-- Sectors tab -->
+    <div id="tab-sectors" style="display:flex">
+      <div class="empty-panel" id="sectors-empty">
+        <div class="empty-panel-icon">🛣️</div>
+        <div class="empty-panel-title">Nastav trasu</div>
+        <div class="empty-panel-text">
+          Klikni na <strong>✏ Kreslit trasu</strong> a naklikej trasu na mapě.<br/>
+          Pak spusť GPS a jeď!
+        </div>
+      </div>
+      <div id="sectors-list" style="display:none;flex:1;overflow-y:auto"></div>
+    </div>
+
+    <!-- Routes tab -->
+    <div id="tab-routes" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div class="setting-group" id="save-route-group" style="padding:16px 16px 8px; gap:6px; flex-shrink:0; border-bottom:1px solid var(--f1-border2)">
+        <div class="setting-label">Uložit aktuální trasu</div>
+        <div style="display:flex;gap:8px">
+          <input id="setting-route-save-name" class="setting-control" type="text" placeholder="Název trasy..." autocomplete="off"/>
+          <button class="btn btn-primary" id="btn-save-route-action" style="padding:8px 14px;font-size:10px">Uložit</button>
+        </div>
+      </div>
+      <div id="routes-list" style="flex:1;overflow-y:auto;padding:16px"></div>
+    </div>
+
+    <!-- History tab -->
+    <div id="tab-history" style="display:none">
+      <div id="history-list"></div>
+    </div>
+
+    <!-- Settings tab -->
+    <div id="tab-settings" style="display:none">
+
+      <!-- SECTOR MODE -->
+      <div class="setting-group">
+        <div class="setting-label">Režim sektorů</div>
+        <div style="display:flex;gap:0;border:1px solid var(--f1-border);border-radius:3px;overflow:hidden;">
+          <button id="smode-count" class="smode-btn smode-active">Počet sektorů</button>
+          <button id="smode-km"    class="smode-btn">Délka (km)</button>
+        </div>
+      </div>
+
+      <!-- COUNT MODE -->
+      <div class="setting-group" id="sg-count">
+        <div class="setting-label">Počet sektorů</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="scount-btn" id="scount-minus">&#8722;</button>
+          <div id="sector-count-display" style="
+            flex:1;text-align:center;
+            font-family:var(--timing-font);font-size:28px;font-weight:400;
+            color:var(--f1-text);background:var(--f1-panel);
+            border:1px solid var(--f1-border);border-radius:3px;padding:8px 0;
+          ">3</div>
+          <button class="scount-btn" id="scount-plus">&#43;</button>
+        </div>
+        <div class="setting-hint">Trasa se rovnoměrně rozdělí na zadaný počet sektorů (jako F1 – S1, S2, S3).</div>
+      </div>
+
+      <!-- KM MODE -->
+      <div class="setting-group" id="sg-km" style="display:none">
+        <div class="setting-label">Délka sektoru</div>
+        <select id="setting-sector-km" class="setting-control">
+          <option value="5">5 km</option>
+          <option value="10" selected>10 km</option>
+          <option value="15">15 km</option>
+          <option value="20">20 km</option>
+          <option value="25">25 km</option>
+          <option value="50">50 km</option>
+        </select>
+        <div class="setting-hint">Každých N km se automaticky uzavře sektor.</div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-label">Detekční radius GPS</div>
+        <select id="setting-radius" class="setting-control">
+          <option value="30">30 m (přesný GPS)</option>
+          <option value="60" selected>60 m (doporučeno)</option>
+          <option value="100">100 m (horší GPS)</option>
+          <option value="150">150 m (miasto/budovy)</option>
+        </select>
+        <div class="setting-hint">Vzdálenost od hranice sektoru pro jeho detekci.</div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-label">Porovnání s jízdou</div>
+        <select id="setting-compare" class="setting-control">
+          <option value="last">Poslední jízda</option>
+          <option value="best">Nejrychlejší jízda</option>
+          <option value="none">Bez porovnání</option>
+        </select>
+        <div class="setting-hint">S kterou jízdou porovnávat sektory při nové jízdě.</div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-label">Název jízdy</div>
+        <input id="setting-ride-name" class="setting-control" type="text" placeholder="Moje jízda" value="Moje jízda"/>
+      </div>
+      <div class="setting-group" style="margin-top:8px">
+        <button class="btn btn-danger btn-secondary" id="btn-clear-storage" style="font-size:10px;letter-spacing:1px">🗑 Smazat všechna data</button>
+      </div>
+    </div>
+
+    <!-- Status footer -->
+    <div id="status-bar">
+      <div class="gps-dot" id="status-dot"></div>
+      <span id="status-text">Čekám na GPS…</span>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- MODAL -->
+<div id="modal-bg">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Potvrdit akci</div>
+    <div class="modal-body" id="modal-body">Jsi si jistý?</div>
+    <div class="modal-btns">
+      <button class="btn btn-primary" id="modal-ok">Potvrdit</button>
+      <button class="btn btn-secondary" id="modal-cancel">Zrušit</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULTS OVERLAY -->
+<div id="results-overlay">
+  <div class="results-box">
+    <div class="res-header">
+      <div>
+        <div class="res-title">Výsledky jízdy</div>
+        <div class="res-name" id="res-name">—</div>
+      </div>
+      <button class="res-close" id="res-close">✕</button>
+    </div>
+    <div class="res-totals">
+      <div class="res-total-item">
+        <div class="res-total-label">Celkový čas</div>
+        <div class="res-total-value" id="res-total-time">—</div>
+        <div class="res-total-sub">mm:ss.sss</div>
+      </div>
+      <div class="res-total-item">
+        <div class="res-total-label">Vzdálenost</div>
+        <div class="res-total-value" id="res-total-km">—</div>
+        <div class="res-total-sub">km trasy</div>
+      </div>
+      <div class="res-total-item">
+        <div class="res-total-label">Sektorů</div>
+        <div class="res-total-value" id="res-total-sectors">—</div>
+        <div class="res-total-sub">dokončených</div>
+      </div>
+    </div>
+    <div class="res-sectors-title">SEKTORY &nbsp;&middot;&nbsp; <span id="res-compare-label"></span></div>
+    <div id="res-sector-rows"></div>
+    <div class="res-gap-row" id="res-gap-row" style="display:none">
+      <span>Celková delta vs. předcházející jízda</span>
+      <span class="res-gap-val" id="res-gap-val">—</span>
+    </div>
+    <div class="res-footer">
+      <button class="btn btn-success" id="res-save" style="flex:1;justify-content:center">✓ Uložit jízdu</button>
+      <button class="btn btn-secondary" id="res-discard">Zahodit</button>
+      <button class="btn btn-secondary" id="res-close-btn" style="display:none;flex:1;justify-content:center">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ╔══════════════════════════════════════════════════════════════════╗
+//  MOTOSEKTORY – F1 GPS Sector Timing
+//  Vlastní trasa na mapě + reálné GPS sledování + F1 design
+// ╚══════════════════════════════════════════════════════════════════╝
+
+// ─── SETTINGS ────────────────────────────────────────────
+let SECTOR_KM = 10;
+let DETECT_RADIUS_M = 60;
+const SIMILAR_PCT = 0.05;
+const STORAGE_KEY = 'motosektory_v3';
+
+// ─── STATE ───────────────────────────────────────────────
+const S = {
+  // Route building
+  drawingMode: false,
+  activeRouteName: null,
+  routeWaypoints: [],    // [[lat,lng], ...]  raw clicks
+  routePoints: [],       // [[lat,lng], ...]  dense interpolated
+  routeDistances: [],    // cumulative km for each routePoint
+  routeTotalKm: 0,
+  sectorBoundaries: [],  // [{kmAt, pointIdx, pos}, ...]
+  numSectors: 0,
+
+  // Tracking
+  tracking: false,
+  gpsWatchId: null,
+  startTime: null,
+  lastPos: null,
+  lastPosTime: null,
+  currentSpeed: 0,
+  projectedKm: 0,        // how far along the route we are
+  currentSectorIdx: 0,   // which sector is active (0-based)
+  sectorStartTime: null,
+  completedSectors: [],  // [{index, time, color, delta}, ...]
+  compareRide: null,
+  totalGapSec: 0,
+
+  // UI
+  activeTab: 'sectors',
+  uiTimer: null,
+  simRunning: false,
+  simTimer: null,
+};
+
+// ─── MAP ─────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [50.075, 14.438],
+  zoom: 13,
+  zoomControl: false, // we add it manually at bottomright
+});
+// Zoom control at bottom-right, away from GPS badge (top-left)
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; CartoDB &copy; OSM contributors',
+  maxZoom: 19,
+}).addTo(map);
+
+// Map layer groups
+const layerRoute   = L.layerGroup().addTo(map);  // drawn route
+const layerSectors = L.layerGroup().addTo(map);  // sector boundaries
+const layerTrack   = L.layerGroup().addTo(map);  // live track
+const layerGps     = L.layerGroup().addTo(map);  // gps marker
+const layerCorners = L.layerGroup().addTo(map);  // corner turn markers
+
+// ─── IDLE GPS (always-on position dot) ───────────────────
+let idleGpsMarker    = null;   // blue dot shown always
+let idleAccCircle    = null;   // accuracy ring
+let idleWatchId      = null;   // background watchPosition
+let currentRealPos   = null;   // latest known GPS pos
+let followMode       = false;  // auto-pan to position
+let smoothedRealPos  = null;   // vyhlazená GPS pozice pro idle marker
+let lastDisplayPos   = null;   // naposledy zobrazená/přichycená pozice během měření
+
+function startIdleGps() {
+  if (!navigator.geolocation) return;
+  idleWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const { latitude:lat, longitude:lng, accuracy } = pos.coords;
+      const p = [lat, lng];
+      currentRealPos = p;
+
+      // Nízkoprůchodový filtr pro vyhlazení neaktivního modrého bodu (proti skákání)
+      if (!smoothedRealPos) {
+        smoothedRealPos = p;
+      } else {
+        const alpha = 0.35; // menší hodnota = plynulejší, ale pomalejší
+        smoothedRealPos = [
+          smoothedRealPos[0] + alpha * (p[0] - smoothedRealPos[0]),
+          smoothedRealPos[1] + alpha * (p[1] - smoothedRealPos[1])
+        ];
+      }
+
+      // Uložit úspěšné povolení GPS do localStorage pro fallbacky (např. Safari)
+      localStorage.setItem('motosektory_gps_allowed', 'true');
+
+      // Update badge
+      document.getElementById('gps-dot').className = 'gps-dot ok';
+      document.getElementById('gps-text').textContent = `GPS OK  ±${Math.round(accuracy)} m`;
+      document.getElementById('status-dot').className = 'gps-dot ok';
+      document.getElementById('status-text').textContent = `GPS OK  ±${Math.round(accuracy)} m`;
+
+      // Create or move idle marker
+      if (!idleGpsMarker) {
+        const icon = L.divIcon({
+          html: `<div class="idle-gps-outer"><div class="idle-gps-inner"></div></div>`,
+          className: '', iconSize: [22,22], iconAnchor: [11,11]
+        });
+        idleGpsMarker = L.marker(smoothedRealPos, { icon, zIndexOffset: 1500 }).addTo(layerGps);
+        // Center map on first fix
+        map.setView(smoothedRealPos, 15);
+      } else {
+        idleGpsMarker.setLatLng(smoothedRealPos);
+      }
+
+      // Accuracy circle
+      if (!idleAccCircle) {
+        idleAccCircle = L.circle(smoothedRealPos, {
+          radius: accuracy,
+          className: 'leaflet-accuracy-circle',
+          interactive: false,
+        }).addTo(layerGps);
+      } else {
+        idleAccCircle.setLatLng(smoothedRealPos).setRadius(accuracy);
+      }
+
+      // Auto-pan if follow mode active
+      if (followMode) map.panTo(smoothedRealPos, { animate: true, duration: .6 });
+
+      // Forward to tracking handler if tracking is active
+      if (S.tracking && !S.simRunning) onGpsPosition(pos);
+    },
+    err => {
+      if (err.code === 1) {
+        localStorage.setItem('motosektory_gps_allowed', 'false');
+      }
+      document.getElementById('gps-dot').className = 'gps-dot wait';
+      document.getElementById('gps-text').textContent = err.code === 1
+        ? 'GPS zamítnuto – povol polohu' : 'GPS signál…';
+      document.getElementById('status-dot').className = 'gps-dot wait';
+      document.getElementById('status-text').textContent = 'GPS – čekám na signál';
+    },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+  );
+}
+
+// LOCATE button
+document.getElementById('btn-locate').addEventListener('click', () => {
+  const btn = document.getElementById('btn-locate');
+  if (!currentRealPos) {
+    // No fix yet – try one-shot
+    btn.classList.add('locating');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        currentRealPos = [pos.coords.latitude, pos.coords.longitude];
+        map.flyTo(currentRealPos, 16, { duration: 1.2 });
+        followMode = true;
+        btn.classList.remove('locating');
+        btn.textContent = '🔵';
+        setTimeout(() => { btn.textContent = '📍'; followMode = false; }, 4000);
+
+        // Po udělení oprávnění nastartujeme sledování na pozadí
+        if (idleWatchId === null) {
+          startIdleGps();
+        }
+      },
+      () => { btn.classList.remove('locating'); toast('GPS signál nedostupný', 'toast-red', 3000); },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  } else {
+    map.flyTo(currentRealPos, Math.max(map.getZoom(), 16), { duration: 1.2 });
+    followMode = true;
+    btn.textContent = '🔵';
+    setTimeout(() => { btn.textContent = '📍'; followMode = false; }, 4000);
+  }
+});
+
+// Stop follow on manual pan
+map.on('dragstart', () => { followMode = false; document.getElementById('btn-locate').textContent = '📍'; });
+
+let waypointMarkers = [];
+let routePolyline = null;
+let sectorLines = [];
+let gpsMarker = null;
+let currentSectorPolyline = null;
+let currentSectorPoints = [];
+let completedSectorPolylines = [];
+
+// ─── UTILS ───────────────────────────────────────────────
+function haversine(a, b) {
+  const R = 6371;
+  const dLat = (b[0]-a[0]) * Math.PI/180;
+  const dLng = (b[1]-a[1]) * Math.PI/180;
+  const sl = Math.sin(dLat/2), sn = Math.sin(dLng/2);
+  return R * 2 * Math.asin(Math.sqrt(sl*sl + Math.cos(a[0]*Math.PI/180)*Math.cos(b[0]*Math.PI/180)*sn*sn));
+}
+
+// ─── F1 RACETRACK AND GLOW RENDERING UTILS ────────────────
+function getHeading(p1, p2) {
+  return Math.atan2(p2[0] - p1[0], p2[1] - p1[1]);
+}
+
+function getAngleDiff(a, b) {
+  let diff = Math.abs(a - b);
+  if (diff > Math.PI) diff = 2 * Math.PI - diff;
+  return diff;
+}
+
+function detectCorners(points) {
+  const corners = [];
+  if (points.length < 20) return corners;
+  
+  const step = 6; // analyze vectors over ~300m segments
+  const minAngleRad = 0.35; // ~20 degrees heading change
+  const minIndexSpacing = 8; // min points between corners (prevent overlapping)
+  
+  const angles = new Array(points.length).fill(0);
+  for (let i = step; i < points.length - step; i++) {
+    const h1 = Math.atan2(points[i][0] - points[i - step][0], points[i][1] - points[i - step][1]);
+    const h2 = Math.atan2(points[i + step][0] - points[i][0], points[i + step][1] - points[i][1]);
+    let diff = Math.abs(h2 - h1);
+    if (diff > Math.PI) diff = 2 * Math.PI - diff;
+    angles[i] = diff;
+  }
+  
+  for (let i = step + 2; i < points.length - step - 2; i++) {
+    if (angles[i] > minAngleRad && 
+        angles[i] === Math.max(...angles.slice(i - 4, i + 5))) {
+      if (corners.length === 0 || (i - corners[corners.length - 1].idx) >= minIndexSpacing) {
+        corners.push({ idx: i, latlng: points[i] });
+      }
+    }
+  }
+  return corners;
+}
+
+function drawCorners(points) {
+  layerCorners.clearLayers();
+  const corners = detectCorners(points);
+  corners.forEach((c, idx) => {
+    const icon = L.divIcon({
+      html: `<div class="corner-marker">T${idx+1}</div>`,
+      className: '', iconSize: [20, 20], iconAnchor: [10, 10]
+    });
+    L.marker(c.latlng, { icon, interactive: false }).addTo(layerCorners);
+  });
+}
+
+function drawRouteGlow(points) {
+  if (routePolyline) { layerRoute.removeLayer(routePolyline); routePolyline = null; }
+  routePolyline = L.featureGroup().addTo(layerRoute);
+  
+  // 1. Spodní široká červená záře
+  L.polyline(points, {
+    color: '#e10600',
+    weight: 12,
+    opacity: 0.2,
+    lineJoin: 'round',
+    lineCap: 'round',
+    className: 'f1-track-glow'
+  }).addTo(routePolyline);
+  
+  // 2. Prostřední sytě červená čára
+  L.polyline(points, {
+    color: '#ff2620',
+    weight: 5,
+    opacity: 0.85,
+    lineJoin: 'round',
+    lineCap: 'round'
+  }).addTo(routePolyline);
+  
+  // 3. Vnitřní zářící bílé jádro (hot core)
+  L.polyline(points, {
+    color: '#ffffff',
+    weight: 1.5,
+    opacity: 0.95,
+    lineJoin: 'round',
+    lineCap: 'round'
+  }).addTo(routePolyline);
+}
+
+function fmt(sec, ms=false) {
+  if (sec < 0) sec = 0;
+  const m = Math.floor(sec/60);
+  const s = sec%60;
+  if (ms) return `${m}:${Math.floor(s).toString().padStart(2,'0')}.${Math.floor((s%1)*1000).toString().padStart(3,'0')}`;
+  return `${m}:${Math.floor(s).toString().padStart(2,'0')}`;
+}
+
+function fmtDelta(sec) {
+  const sign = sec >= 0 ? '+' : '';
+  return `${sign}${Math.abs(sec) < 60 ? sec.toFixed(2)+'s' : fmt(Math.abs(sec))}`;
+}
+
+function genId() { return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+let toastTimer=null;
+function toast(msg, cls='', dur=2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `${cls} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove('show'), dur);
+}
+
+let modalCb=null;
+function modal(title, body, cb) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').textContent  = body;
+  document.getElementById('modal-bg').classList.add('open');
+  modalCb = cb;
+}
+document.getElementById('modal-ok').onclick = ()=>{
+  document.getElementById('modal-bg').classList.remove('open');
+  if(modalCb) modalCb();
+};
+document.getElementById('modal-cancel').onclick = ()=>{
+  document.getElementById('modal-bg').classList.remove('open');
+};
+
+// ─── STORAGE ─────────────────────────────────────────────
+function loadRides() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function saveRides(r) { localStorage.setItem(STORAGE_KEY, JSON.stringify(r)); }
+function getRides()   { return loadRides(); }
+
+// ─── ROUTE INTERPOLATION ─────────────────────────────────
+// Take waypoints and create a dense point array (~50m steps)
+function interpolateRoute(waypoints) {
+  if (waypoints.length < 2) return { points: [], distances: [], total: 0 };
+  const STEP = 0.05; // km = 50m
+  const points = [waypoints[0]];
+  const distances = [0];
+  let total = 0;
+
+  for (let i=1; i<waypoints.length; i++) {
+    const a = waypoints[i-1], b = waypoints[i];
+    const segDist = haversine(a, b);
+    const steps = Math.max(1, Math.ceil(segDist / STEP));
+    for (let j=1; j<=steps; j++) {
+      const t = j/steps;
+      const pt = [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
+      const d = haversine(points[points.length-1], pt);
+      total += d;
+      points.push(pt);
+      distances.push(total);
+    }
+  }
+
+  return { points, distances, total };
+}
+
+// Build sector boundaries along the interpolated route
+function buildSectors(distances, total, sectorKm) {
+  const boundaries = [];
+  let nextBoundary = sectorKm;
+  while (nextBoundary < total) {
+    // Find index where cumulative >= nextBoundary
+    let idx = distances.findIndex(d => d >= nextBoundary);
+    if (idx === -1) break;
+    boundaries.push({ kmAt: nextBoundary, pointIdx: idx });
+    nextBoundary += sectorKm;
+  }
+  return boundaries;
+}
+
+// ─── ROUTE DRAWING ────────────────────────────────────────
+function enterDrawMode() {
+  S.drawingMode = true;
+  document.getElementById('map-mode-banner').style.display = 'block';
+  map.getContainer().style.cursor = 'crosshair';
+  document.getElementById('btn-setup').classList.add('btn-primary');
+  document.getElementById('btn-setup').classList.remove('btn-secondary');
+  document.getElementById('btn-setup').textContent = '✓ Hotovo';
+  toast('Klikej na mapu pro přidání bodů trasy', '', 4000);
+}
+
+function exitDrawMode() {
+  S.drawingMode = false;
+  document.getElementById('map-mode-banner').style.display = 'none';
+  map.getContainer().style.cursor = '';
+  document.getElementById('btn-setup').classList.remove('btn-primary');
+  document.getElementById('btn-setup').classList.add('btn-secondary');
+  document.getElementById('btn-setup').textContent = '✏ Kreslit trasu';
+  finalizeRoute();
+}
+
+function addWaypoint(latlng) {
+  const pos = [latlng.lat, latlng.lng];
+  S.routeWaypoints.push(pos);
+
+  // Waypoint marker
+  const isFirst = S.routeWaypoints.length === 1;
+  const icon = L.divIcon({
+    html: `<div class="wp-dot${isFirst?' first':''}"></div>`,
+    className:'', iconSize:[10,10], iconAnchor:[5,5]
+  });
+  const m = L.marker(pos, {icon, draggable:true}).addTo(layerRoute);
+  m.on('drag', () => { rebuildRoutePreview(); });
+  m.on('dragend', e => {
+    const idx = waypointMarkers.indexOf(m);
+    if (idx >= 0) S.routeWaypoints[idx] = [e.target.getLatLng().lat, e.target.getLatLng().lng];
+    finalizeRoute();
+  });
+  // Right-click to remove
+  m.on('contextmenu', () => {
+    const idx = waypointMarkers.indexOf(m);
+    if (idx >= 0) {
+      S.routeWaypoints.splice(idx, 1);
+      waypointMarkers.splice(idx, 1);
+      layerRoute.removeLayer(m);
+    }
+    rebuildRoutePreview();
+    finalizeRoute();
+  });
+
+  waypointMarkers.push(m);
+  rebuildRoutePreview();
+}
+
+function rebuildRoutePreview() {
+  // Sync waypoints from markers if dragged
+  waypointMarkers.forEach((m,i)=>{
+    const ll = m.getLatLng();
+    S.routeWaypoints[i] = [ll.lat, ll.lng];
+  });
+
+  if (routePolyline) { layerRoute.removeLayer(routePolyline); routePolyline=null; }
+  if (S.routeWaypoints.length >= 2) {
+    routePolyline = L.polyline(S.routeWaypoints, {
+      color:'#e10600', weight:3, opacity:.7,
+      dashArray:'6 4', lineJoin:'round',
+    }).addTo(layerRoute);
+  }
+}
+
+let finalizeRouteSeq = 0;
+
+function finalizeRoute() {
+  S.activeRouteName = null; // Jakákoliv ruční úprava trasy zruší její uložení (musí se pojmenovat znovu)
+  // Clear old sector visuals
+  layerSectors.clearLayers();
+  sectorLines = [];
+
+  if (S.routeWaypoints.length < 2) {
+    S.routePoints=[]; S.routeDistances=[]; S.routeTotalKm=0;
+    S.sectorBoundaries=[]; S.numSectors=0;
+    updateRouteInfo();
+    return;
+  }
+
+  // Získání trasy z OSRM (po silnicích)
+  const currentSeq = ++finalizeRouteSeq;
+  const coords = S.routeWaypoints.map(wp => `${wp[1]},${wp[0]}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+      if (currentSeq !== finalizeRouteSeq) return;
+      if (data.code === 'Ok' && data.routes?.length > 0) {
+        const route = data.routes[0];
+        const pts = route.geometry.coordinates.map(c => [c[1], c[0]]);
+        const { points, distances, total } = interpolateRoute(pts);
+        applyFinalRoute(points, distances, total);
+      } else {
+        fallbackRoute();
+      }
+    })
+    .catch(err => {
+      console.warn("OSRM routing failed, falling back to straight lines:", err);
+      if (currentSeq === finalizeRouteSeq) {
+        fallbackRoute();
+      }
+    });
+
+  function fallbackRoute() {
+    const { points, distances, total } = interpolateRoute(S.routeWaypoints);
+    applyFinalRoute(points, distances, total);
+  }
+}
+
+function applyFinalRoute(points, distances, total) {
+  S.routePoints = points;
+  S.routeDistances = distances;
+  S.routeTotalKm = total;
+
+  // Build sectors
+  S.sectorBoundaries = buildSectors(distances, total, SECTOR_KM);
+  S.numSectors = S.sectorBoundaries.length + 1; // +1 for the final sector
+
+  // If count mode, recalculate SECTOR_KM to divide route evenly
+  if (sectorMode === 'count' && total > 0) {
+    SECTOR_KM = total / sectorCount;
+    S.sectorBoundaries = buildSectors(distances, total, SECTOR_KM);
+    S.numSectors = sectorCount;
+  }
+
+  // Draw solid route with glow layers and corners
+  drawRouteGlow(points);
+  drawCorners(points);
+
+  // Draw sector boundaries
+  S.sectorBoundaries.forEach((sb, i) => {
+    const pos = points[sb.pointIdx];
+    const color = sectorColors[i % sectorColors.length];
+
+    const icon = L.divIcon({
+      html: `<div class="sb-marker" style="background:${color};box-shadow:0 0 12px ${color}88">S${i+2}</div>`,
+      className:'', iconSize:[28,28], iconAnchor:[14,14]
+    });
+    const m = L.marker(pos, {icon}).addTo(layerSectors);
+    m.bindPopup(`<div style="font-size:12px;font-weight:700">Hranice S${i+1} → S${i+2}</div><div style="font-size:10px;color:var(--f1-muted);margin-top:4px">@ ${sb.kmAt.toFixed(1)} km</div>`);
+    sectorLines.push(m);
+  });
+
+  // Start/Finish flags (custom glowing checkpoints)
+  const startIcon = L.divIcon({
+    html:`<div class="f1-start-marker">S</div>`,
+    className:'', iconSize:[28,28], iconAnchor:[14,14]
+  });
+  const finishIcon = L.divIcon({
+    html:`<div class="f1-finish-marker"></div>`,
+    className:'', iconSize:[28,28], iconAnchor:[14,14]
+  });
+  L.marker(points[0], {icon:startIcon}).addTo(layerSectors).bindPopup('START');
+  L.marker(points[points.length-1], {icon:finishIcon}).addTo(layerSectors).bindPopup('CÍL');
+
+  // Enable start button
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-clear-route').disabled = false;
+
+  // Fit map
+  if (points.length > 0) map.fitBounds(L.latLngBounds(points), {padding:[30,30]});
+
+  updateRouteInfo();
+  buildSectorStrip();
+  updateSectorsList();
+  saveRouteToStorage();
+}
+
+const sectorColors = ['#d400ff','#00ff44','#ffe600','#00cfff','#ff6b35','#ff61a6'];
+
+function clearRoute() {
+  layerRoute.clearLayers();
+  layerSectors.clearLayers();
+  layerTrack.clearLayers();
+  layerCorners.clearLayers();
+  waypointMarkers = [];
+  routePolyline = null;
+  sectorLines = [];
+  S.routeWaypoints = [];
+  S.routePoints = [];
+  S.routeDistances = [];
+  S.routeTotalKm = 0;
+  S.sectorBoundaries = [];
+  S.numSectors = 0;
+  S.activeRouteName = null;
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-clear-route').disabled = true;
+  updateRouteInfo();
+  buildSectorStrip();
+  updateSectorsList();
+
+  const nameInput = document.getElementById('setting-route-save-name');
+  if (nameInput) nameInput.value = '';
+
+  localStorage.removeItem('motosektory_route_v3');
+}
+
+// ─── ROUTE INFO ───────────────────────────────────────────
+function updateRouteInfo() {
+  document.getElementById('ri-km').textContent = S.routeTotalKm > 0 ? S.routeTotalKm.toFixed(1)+' km' : '—';
+  document.getElementById('ri-sectors').textContent = S.numSectors > 0 ? S.numSectors : '—';
+  
+  let sectorKmStr = '—';
+  if (S.routeTotalKm > 0) {
+    if (SECTOR_KM < 1.0) {
+      sectorKmStr = Math.round(SECTOR_KM * 1000) + ' m';
+    } else {
+      sectorKmStr = SECTOR_KM.toFixed(2) + ' km';
+    }
+  }
+  document.getElementById('ri-km-sector').textContent = sectorKmStr;
+  
+  const st = document.getElementById('ri-status');
+  if (!S.routeTotalKm) { st.textContent='Není trasa'; st.style.color='var(--f1-dim)'; }
+  else if (S.tracking) { st.textContent='JEDE'; st.style.color='var(--f1-red)'; }
+  else { st.textContent='Připraveno'; st.style.color='var(--sector-green)'; }
+}
+
+// ─── SECTOR STRIP (topbar) ────────────────────────────────
+function buildSectorStrip() {
+  const strip = document.getElementById('sector-strip');
+  strip.innerHTML = '';
+  const n = Math.max(S.numSectors, 3);
+  for (let i=0; i<n; i++) {
+    const box = document.createElement('div');
+    box.className = 'sector-box';
+    box.id = `sbox-${i}`;
+    box.innerHTML = `
+      <div class="sector-box-label">S${i+1}</div>
+      <div class="sector-box-time">--:--.---</div>
+      <div class="sector-box-delta"></div>
+    `;
+    strip.appendChild(box);
+  }
+}
+
+function updateSectorBox(idx, timeSec, colorClass, delta) {
+  const box = document.getElementById(`sbox-${idx}`);
+  if (!box) return;
+  const timeEl = box.querySelector('.sector-box-time');
+  const deltaEl = box.querySelector('.sector-box-delta');
+  box.className = `sector-box done-${colorClass}`;
+  timeEl.textContent = fmt(timeSec, true);
+  if (delta !== null) {
+    deltaEl.textContent = fmtDelta(delta);
+    deltaEl.style.color = colorClass === 'purple' ? 'var(--sector-purple)'
+      : colorClass === 'green' ? 'var(--sector-green)' : 'var(--sector-yellow)';
+  }
+}
+
+function setActiveSectorBox(idx) {
+  document.querySelectorAll('.sector-box').forEach(b => b.classList.remove('active'));
+  const box = document.getElementById(`sbox-${idx}`);
+  if (box) {
+    box.classList.add('active');
+    const timeEl = box.querySelector('.sector-box-time');
+    timeEl.textContent = '0:00.000';
+  }
+}
+
+// ─── SECTORS LIST (side panel) ────────────────────────────
+function updateSectorsList() {
+  const empty = document.getElementById('sectors-empty');
+  const list  = document.getElementById('sectors-list');
+
+  if (!S.tracking && S.completedSectors.length === 0 && !S.routeTotalKm) {
+    empty.style.display='flex'; list.style.display='none'; return;
+  }
+  empty.style.display='none'; list.style.display='block';
+  list.innerHTML = '';
+
+  // Current live sector
+  if (S.tracking && S.sectorStartTime) {
+    const elapsed = (Date.now() - S.sectorStartTime) / 1000;
+    const item = makeSectorItem(S.currentSectorIdx, elapsed, 'live', null, true);
+    list.appendChild(item);
+  }
+
+  // Completed sectors (newest first)
+  const done = [...S.completedSectors].reverse();
+  done.forEach(sc => {
+    const item = makeSectorItem(sc.index, sc.time, sc.colorClass, sc.delta, false);
+    list.appendChild(item);
+  });
+
+  if (S.tracking || S.completedSectors.length > 0) return;
+
+  // Show planned sectors
+  if (S.numSectors > 0) {
+    for (let i=0; i<S.numSectors; i++) {
+      const item = makeSectorItem(i, 0, 'none', null, false, true);
+      list.appendChild(item);
+    }
+  }
+}
+
+function makeSectorItem(idx, timeSec, colorClass, delta, isLive, isPlanned=false) {
+  const el = document.createElement('div');
+  el.className = `sector-item${isLive?' live':''} col-${colorClass}`;
+
+  const startKm = idx * SECTOR_KM;
+  const endKm = (idx+1) * SECTOR_KM;
+  const prevSec = S.compareRide?.sectors?.[idx]?.time ?? null;
+
+  let timeStr = isPlanned ? '--:--.---' : fmt(timeSec, true);
+  let deltaStr = '', deltaClass = '';
+  if (delta !== null) {
+    deltaStr = fmtDelta(delta);
+    deltaClass = colorClass==='purple'?'delta-faster':colorClass==='green'?'delta-same':'delta-slower';
+  }
+
+  el.innerHTML = `
+    <div class="si-left"></div>
+    <div class="si-body">
+      <div class="si-top">
+        <div class="si-num">
+          <span class="si-num-badge">${isLive?'● LIVE':'S'+String(idx+1).padStart(2,'0')}</span>
+          <span style="margin-left:6px;font-size:10px;color:var(--f1-dim)">${startKm.toFixed(2)}–${Math.min(endKm, S.routeTotalKm || endKm).toFixed(2)} km</span>
+        </div>
+        <div class="si-time">${timeStr}</div>
+      </div>
+      <div class="si-bottom">
+        ${prevSec && !isLive && !isPlanned ? `
+        <div class="si-detail">
+          <div class="si-detail-label">Předchozí</div>
+          <div class="si-detail-value">${fmt(prevSec,true)}</div>
+        </div>` : ''}
+        ${delta!==null && !isLive ? `
+        <div class="si-detail">
+          <div class="si-detail-label">Delta</div>
+          <div class="si-detail-value si-delta ${deltaClass}">${deltaStr}</div>
+        </div>` : ''}
+        ${isLive ? `<div class="si-detail"><div class="si-detail-label">Progress</div><div class="si-detail-value" style="color:var(--sector-blue)">${(((S.projectedKm - startKm)/SECTOR_KM)*100).toFixed(0)}%</div></div>` : ''}
+        ${isPlanned ? `<div class="si-detail"><div class="si-detail-label">Status</div><div class="si-detail-value">Čeká</div></div>` : ''}
+      </div>
+    </div>
+  `;
+  return el;
+}
+
+// ─── GPS TRACKING ─────────────────────────────────────────
+function projectOnRoute(pos) {
+  // Find closest point on route and return cumulative km
+  const pts = S.routePoints;
+  if (!pts.length) return 0;
+  let minDist = Infinity, minIdx = 0;
+  for (let i=0; i<pts.length; i++) {
+    const d = haversine(pos, pts[i]) * 1000; // meters
+    if (d < minDist) { minDist = d; minIdx = i; }
+  }
+  return { km: S.routeDistances[minIdx], distFromRoute: minDist, idx: minIdx };
+}
+
+function sectorColorClass(timeSec, compareTimeSec) {
+  if (compareTimeSec === null) return 'purple'; // první jízda = osobní rekord
+  const diff = (timeSec - compareTimeSec) / compareTimeSec;
+  if (diff < -SIMILAR_PCT) return 'purple';
+  if (diff >  SIMILAR_PCT) return 'yellow';
+  return 'green';
+}
+
+function selectComparisonRide() {
+  const rides = getRides();
+  if (!S.activeRouteName) {
+    S.compareRide = null;
+    return;
+  }
+
+  // Filtrujeme striktně pouze jízdy, které mají stejný název trasy a stejný počet sektorů
+  const routeRides = rides.filter(r => 
+    r.routeName === S.activeRouteName && 
+    r.sectors?.length === S.numSectors
+  );
+  const cmpMode = document.getElementById('setting-compare').value;
+
+  if (cmpMode === 'last' && routeRides.length > 0) {
+    S.compareRide = routeRides[routeRides.length - 1];
+  } else if (cmpMode === 'best' && routeRides.length > 0) {
+    // Sestavíme ideální osobní rekord ze všech nejlepších sektorů na této trase
+    const bestSectors = [];
+    for (let i = 0; i < S.numSectors; i++) {
+      const sectorTimes = routeRides.map(r => r.sectors?.[i]?.time).filter(t => t !== undefined && t !== null);
+      if (sectorTimes.length > 0) {
+        bestSectors.push({
+          index: i,
+          time: Math.min(...sectorTimes)
+        });
+      }
+    }
+    if (bestSectors.length > 0) {
+      S.compareRide = {
+        name: `Osobní rekord (${S.activeRouteName})`,
+        sectors: bestSectors
+      };
+    } else {
+      S.compareRide = null;
+    }
+  } else {
+    S.compareRide = null;
+  }
+}
+
+function startTracking() {
+  if (!navigator.geolocation) { toast('GPS není dostupné!','toast-red',4000); return; }
+  if (!S.routePoints.length)  { toast('Nejprve nakresli trasu!','toast-red',3000); return; }
+
+  // Vybrat srovnávací jízdu pro tuto konkrétní trasu
+  selectComparisonRide();
+
+  if (S.compareRide) toast(`Porovnávám s: ${S.compareRide.name}`,'',3000);
+
+  S.tracking = true;
+  lastDisplayPos = null; // Reset vyhlazení trasy na startu
+  S.startTime = Date.now();
+  S.sectorStartTime = Date.now();
+  S.lastPos = null;
+  S.projectedKm = 0;
+  S.currentSectorIdx = 0;
+  S.completedSectors = [];
+  S.totalGapSec = 0;
+  currentSectorPoints = [];
+  completedSectorPolylines = [];
+
+  layerTrack.clearLayers();
+  currentSectorPolyline = null;
+
+  document.getElementById('btn-start').style.display='none';
+  document.getElementById('btn-stop').style.display='flex';
+  document.getElementById('btn-setup').disabled=true;
+  document.getElementById('btn-demo').disabled=true;
+  document.getElementById('rec-badge').classList.add('active');
+  document.getElementById('gps-dot').className='gps-dot tracking';
+  document.getElementById('gps-text').textContent='GPS Tracking…';
+  document.getElementById('status-dot').className='gps-dot tracking';
+  document.getElementById('status-text').textContent='Nahrávám jízdu…';
+
+  buildSectorStrip();
+  setActiveSectorBox(0);
+  updateRouteInfo();
+
+  // GPS is already being watched by idleGps – we just set S.tracking=true
+  // and onGpsPosition will be called from the idle watcher.
+  // If idle watcher failed or isn't running yet, start our own watch.
+  if (idleWatchId === null) {
+    startIdleGps();
+  }
+
+  S.uiTimer = setInterval(uiTick, 200);
+}
+
+function onGpsPosition(pos) {
+  const { latitude:lat, longitude:lng, speed, accuracy } = pos.coords;
+  const newPos = [lat, lng];
+
+  S.currentSpeed = speed ? speed * 3.6 : 0;
+
+  // GPS status
+  document.getElementById('gps-dot').className = 'gps-dot ok';
+  document.getElementById('gps-text').textContent = `GPS OK ±${Math.round(accuracy)}m`;
+  document.getElementById('status-dot').className = 'gps-dot tracking';
+  document.getElementById('status-text').textContent = `Jede | ±${Math.round(accuracy)}m | ${Math.round(S.currentSpeed)} km/h`;
+
+  if (S.lastPos) {
+    // Project onto route
+    const proj = projectOnRoute(newPos);
+    S.projectedKm = proj.km;
+
+    // Přichycení k silnici (Route snapping)
+    let displayPos = newPos;
+    if (proj && proj.distFromRoute <= DETECT_RADIUS_M * 2.5) {
+      // Pokud jsme blízko trasy, modrý bod se přichytí k nejbližšímu bodu na silnici
+      displayPos = S.routePoints[proj.idx];
+    } else {
+      // Pokud jsme vyjeli z trasy, vyhladíme data pomocí EMA filtru (proti skákání)
+      if (!lastDisplayPos) lastDisplayPos = newPos;
+      else {
+        const alpha = 0.4;
+        displayPos = [
+          lastDisplayPos[0] + alpha * (newPos[0] - lastDisplayPos[0]),
+          lastDisplayPos[1] + alpha * (newPos[1] - lastDisplayPos[1])
+        ];
+      }
+    }
+    lastDisplayPos = displayPos;
+
+    // Add point to current sector track (použijeme vyhlazenou/přichycenou pozici)
+    currentSectorPoints.push(displayPos);
+    redrawCurrentSector(displayPos);
+
+    // Check if we passed a sector boundary
+    checkSectorBoundary(proj);
+  } else {
+    // First point
+    let displayPos = newPos;
+    const proj = projectOnRoute(newPos);
+    if (proj && proj.distFromRoute <= DETECT_RADIUS_M * 2.5) {
+      displayPos = S.routePoints[proj.idx];
+    }
+    lastDisplayPos = displayPos;
+    map.setView(displayPos, 15);
+    currentSectorPoints = [displayPos];
+  }
+
+  S.lastPos = newPos;
+  S.lastPosTime = Date.now();
+
+  updateGpsMarker(lastDisplayPos || newPos);
+}
+
+function redrawCurrentSector(pos) {
+  if (currentSectorPolyline) layerTrack.removeLayer(currentSectorPolyline);
+  if (currentSectorPoints.length >= 2) {
+    // Live line color = purple when no comparison (first ride), else blue
+    const liveColor = S.compareRide ? '#00cfff' : '#d400ff';
+    const glowClass = S.compareRide ? 'f1-live-glow-cyan' : 'f1-live-glow-purple';
+    currentSectorPolyline = L.featureGroup().addTo(layerTrack);
+    // 1. Spodní záře (širší)
+    L.polyline(currentSectorPoints, {
+      color: liveColor, weight: 12, opacity: 0.35, lineJoin: 'round', lineCap: 'round', className: glowClass
+    }).addTo(currentSectorPolyline);
+    // 2. Hlavní barevná čára
+    L.polyline(currentSectorPoints, {
+      color: liveColor, weight: 5, opacity: 0.85, lineJoin: 'round', lineCap: 'round'
+    }).addTo(currentSectorPolyline);
+    // 3. Vnitřní jádro
+    L.polyline(currentSectorPoints, {
+      color: '#ffffff', weight: 1.5, opacity: 0.95, lineJoin: 'round', lineCap: 'round'
+    }).addTo(currentSectorPolyline);
+
+    // Pan gently
+    map.panTo(pos, {animate:true, duration:.5, easeLinearity:1, noMoveStart:true});
+  }
+}
+
+function checkSectorBoundary(proj) {
+  // Check if projected km has crossed the next sector boundary
+  const boundaries = S.sectorBoundaries;
+  if (S.currentSectorIdx > boundaries.length) return; // past last sector
+
+  const nextBoundary = boundaries[S.currentSectorIdx]; // the boundary ending current sector
+  if (!nextBoundary) {
+    // We are in the last sector. Check if we reached the finish line.
+    const distToFinish = S.routeTotalKm - proj.km;
+    if (distToFinish <= Math.max(0.05, DETECT_RADIUS_M / 1000)) {
+      // Přidáme všechny zbývající body cesty, aby čára vedla až do skutečného cíle
+      const remaining = S.routePoints.slice(proj.idx + 1);
+      currentSectorPoints.push(...remaining);
+
+      completeSector(proj);
+      // Auto-stop tracking with save
+      setTimeout(() => {
+        if (S.simRunning) {
+          S.simRunning = false;
+          document.getElementById('btn-demo').textContent = '⚡ Demo';
+        }
+        doStop(true);
+      }, 500);
+    }
+    return;
+  }
+
+  if (proj.km >= nextBoundary.kmAt && proj.distFromRoute*1000 < DETECT_RADIUS_M * 3) {
+    completeSector(proj);
+  }
+}
+
+function completeSector(proj) {
+  const now = Date.now();
+  const sectorTimeSec = (now - S.sectorStartTime) / 1000;
+  const idx = S.currentSectorIdx;
+
+  const prevSec = S.compareRide?.sectors?.[idx]?.time ?? null;
+  const cc = sectorColorClass(sectorTimeSec, prevSec);
+  const delta = prevSec !== null ? sectorTimeSec - prevSec : null;
+
+  const lineColor = cc==='purple' ? '#d400ff' : cc==='green' ? '#00ff44' : cc==='yellow' ? '#ffe600' : '#00cfff';
+
+  // Vykreslíme dokončený sektor s více vrstvami pro efekt záře
+  if (currentSectorPoints.length >= 2) {
+    const pl = L.featureGroup().addTo(layerTrack);
+    const sectorGlowClass = cc === 'purple' ? 'f1-sector-glow-purple'
+                          : cc === 'green' ? 'f1-sector-glow-green'
+                          : cc === 'yellow' ? 'f1-sector-glow-yellow' : 'f1-sector-glow-blue';
+    // 1. Spodní záře (širší, vyšší průhlednost)
+    L.polyline(currentSectorPoints, {
+      color: lineColor, weight: 12, opacity: 0.3, lineJoin: 'round', lineCap: 'round', className: sectorGlowClass
+    }).addTo(pl);
+    // 2. Hlavní barevná čára
+    L.polyline(currentSectorPoints, {
+      color: lineColor, weight: 5, opacity: 0.85, lineJoin: 'round', lineCap: 'round'
+    }).addTo(pl);
+    // 3. Vnitřní svítící jádro (bílé)
+    L.polyline(currentSectorPoints, {
+      color: '#ffffff', weight: 1.5, opacity: 0.95, lineJoin: 'round', lineCap: 'round'
+    }).addTo(pl);
+
+    completedSectorPolylines.push(pl);
+  }
+
+  // Sector boundary marker
+  const boundary = S.sectorBoundaries[idx];
+  const pos = boundary ? S.routePoints[boundary.pointIdx] : S.routePoints[S.routePoints.length - 1];
+  const icon = L.divIcon({
+    html:`<div class="sb-marker" style="background:${lineColor};color:#000;box-shadow:0 0 16px ${lineColor}88">S${idx+1}</div>`,
+    className:'', iconSize:[28,28], iconAnchor:[14,14]
+  });
+  const m = L.marker(pos, {icon}).addTo(layerTrack);
+  m.bindPopup(`
+    <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--f1-muted)">Sektor ${idx+1}</div>
+    <div style="font-size:20px;font-weight:900;margin:4px 0;color:${lineColor}">${fmt(sectorTimeSec,true)}</div>
+    ${delta!==null?`<div style="font-size:12px;font-weight:700;color:${lineColor}">${fmtDelta(delta)}</div>`:''}
+  `).openPopup();
+
+  // Update state
+  S.completedSectors.push({ index:idx, time:sectorTimeSec, colorClass:cc, delta, prevSec });
+  if (delta !== null) S.totalGapSec += delta;
+
+  // Toast notification
+  const emoji = cc==='purple'?'🟣':cc==='green'?'🟢':'🟡';
+  const toastClass = cc==='purple'?'toast-purple':cc==='green'?'toast-green':'toast-yellow';
+  toast(`${emoji} S${idx+1} – ${fmt(sectorTimeSec,true)}${delta!==null?' ('+fmtDelta(delta)+')':''}`, toastClass);
+
+  // Update topbar sector box
+  updateSectorBox(idx, sectorTimeSec, cc, delta);
+
+  // Move to next sector
+  S.currentSectorIdx++;
+  S.sectorStartTime = Date.now();
+  const fallbackPos = boundary ? S.routePoints[boundary.pointIdx] : S.routePoints[S.routePoints.length - 1];
+  currentSectorPoints = [S.lastPos || fallbackPos];
+  if (currentSectorPolyline) { layerTrack.removeLayer(currentSectorPolyline); currentSectorPolyline=null; }
+
+  if (S.currentSectorIdx <= S.sectorBoundaries.length) {
+    setActiveSectorBox(S.currentSectorIdx);
+  }
+
+  updateSectorsList();
+}
+
+function uiTick() {
+  if (!S.tracking || !S.startTime) return;
+  const now = Date.now();
+  const totalSec = (now - S.startTime) / 1000;
+  const sectorSec = S.sectorStartTime ? (now - S.sectorStartTime) / 1000 : 0;
+
+  // Lap time
+  document.getElementById('m-laptime').textContent = fmt(totalSec, true);
+
+  // Speed
+  const curSpeed = Math.round(S.currentSpeed);
+  document.getElementById('m-speed').textContent = curSpeed;
+  
+  // Telemetry HUD Speed updates (gauge max is 180 km/h)
+  document.getElementById('hud-speed').textContent = curSpeed;
+  const maxHudSpeed = 180;
+  const fillVal = 200 - Math.min(200, (curSpeed / maxHudSpeed) * 200);
+  document.getElementById('hud-gauge-fill').style.strokeDashoffset = fillVal;
+
+  // Gap
+  const gapEl = document.getElementById('m-gap');
+  if (S.completedSectors.length > 0 && S.totalGapSec !== 0) {
+    gapEl.textContent = fmtDelta(S.totalGapSec);
+    gapEl.className = `lap-item-value gap ${S.totalGapSec < 0 ? 'ahead' : 'behind'}`;
+  } else {
+    gapEl.textContent = '--';
+    gapEl.className = 'lap-item-value gap same';
+  }
+
+  // Active sector box – update live time
+  const activeBox = document.getElementById(`sbox-${S.currentSectorIdx}`);
+  if (activeBox) {
+    const timeEl = activeBox.querySelector('.sector-box-time');
+    timeEl.textContent = fmt(sectorSec, true);
+  }
+
+  // Sector progress bar
+  const progress = Math.min(1, (S.projectedKm - S.currentSectorIdx * SECTOR_KM) / SECTOR_KM);
+  document.getElementById('sector-progress').style.display='block';
+  document.getElementById('sector-progress-bar').style.width = (progress*100)+'%';
+
+  updateSectorsList();
+}
+
+function onGpsError(err) {
+  const msgs = {1:'GPS přístup zamítnut – povol polohu!',2:'GPS signál nedostupný',3:'GPS timeout'};
+  document.getElementById('gps-dot').className='gps-dot wait';
+  document.getElementById('gps-text').textContent=msgs[err.code]||'GPS chyba';
+  if (err.code===1) toast(msgs[1],'toast-red',6000);
+}
+
+function stopTracking(save=true) {
+  if (!S.tracking) return;
+  if (save) {
+    modal('Zastavit jízdu?','Uložit výsledky této jízdy?', ()=>doStop(true));
+  } else {
+    doStop(false);
+  }
+}
+
+function doStop(save) {
+  S.tracking = false;
+  lastDisplayPos = null; // Reset vyhlazení po zastavení měření
+
+  // Only clear our own watch (not the idle one)
+  if (S.gpsWatchId!==null) { navigator.geolocation.clearWatch(S.gpsWatchId); S.gpsWatchId=null; }
+  if (S.uiTimer)           { clearInterval(S.uiTimer); S.uiTimer=null; }
+  if (S.simTimer)          { clearTimeout(S.simTimer); S.simTimer=null; S.simRunning=false; }
+
+  // Vykreslíme nedokončený sektor v modré barvě pouze v případě, že jízda byla ukončena předčasně (před cílem)
+  if (S.currentSectorIdx < S.numSectors && currentSectorPoints.length >= 2) {
+    const pl = L.featureGroup().addTo(layerTrack);
+    L.polyline(currentSectorPoints, { color: '#00cfff', weight: 12, opacity: 0.25, lineJoin: 'round', lineCap: 'round', className: 'f1-sector-glow-blue' }).addTo(pl);
+    L.polyline(currentSectorPoints, { color: '#00cfff', weight: 5, opacity: 0.75, lineJoin: 'round', lineCap: 'round' }).addTo(pl);
+    L.polyline(currentSectorPoints, { color: '#ffffff', weight: 1.5, opacity: 0.9, lineJoin: 'round', lineCap: 'round' }).addTo(pl);
+  }
+  if (currentSectorPolyline) { layerTrack.removeLayer(currentSectorPolyline); currentSectorPolyline=null; }
+  if (gpsMarker) { layerGps.removeLayer(gpsMarker); gpsMarker=null; }
+
+  // Reset Telemetry HUD Speedometer on stop
+  document.getElementById('hud-speed').textContent = '0';
+  document.getElementById('hud-gauge-fill').style.strokeDashoffset = 200;
+
+  if (save && S.completedSectors.length > 0) {
+    const totalSec = S.completedSectors.reduce((sum, sc) => sum + sc.time, 0);
+    const rideData = {
+      id: genId(),
+      name: document.getElementById('setting-ride-name').value.trim()||'Moje jízda',
+      date: new Date().toLocaleDateString('cs-CZ'),
+      dateTs: Date.now(),
+      totalTime: totalSec,
+      totalKm: S.routeTotalKm,
+      routeName: S.activeRouteName,
+      compareRideName: S.compareRide ? S.compareRide.name : null,
+      sectors: S.completedSectors.map(sc=>({
+        index: sc.index,
+        time: sc.time,
+        colorClass: sc.colorClass,
+        delta: sc.delta,
+        prevSec: sc.prevSec
+      })),
+    };
+    showResults(rideData, S.completedSectors, S.compareRide, S.totalGapSec);
+  }
+
+  document.getElementById('btn-start').style.display='flex';
+  document.getElementById('btn-stop').style.display='none';
+  document.getElementById('btn-setup').disabled=false;
+  document.getElementById('btn-demo').disabled=false;
+  document.getElementById('rec-badge').classList.remove('active');
+  document.getElementById('sector-progress').style.display='none';
+  document.getElementById('gps-dot').className='gps-dot';
+  document.getElementById('gps-text').textContent='GPS Připraveno';
+  document.getElementById('status-dot').className='gps-dot';
+  document.getElementById('status-text').textContent='Sledování zastaveno';
+
+  updateRouteInfo();
+  updateSectorsList();
+  renderHistory();
+}
+
+function updateGpsMarker(pos) {
+  if (!gpsMarker) {
+    const icon = L.divIcon({
+      html:`<div class="gps-marker-outer"><div class="gps-marker-inner"></div></div>`,
+      className:'', iconSize:[24,24], iconAnchor:[12,12]
+    });
+    gpsMarker = L.marker(pos, {icon, zIndexOffset:2000}).addTo(layerGps);
+  } else {
+    gpsMarker.setLatLng(pos);
+  }
+}
+
+// ─── HISTORY ─────────────────────────────────────────────
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  list.innerHTML='';
+  const rides = getRides().slice().reverse();
+  if (!rides.length) {
+    list.innerHTML=`<div class="empty-panel"><div class="empty-panel-icon">🗂️</div><div class="empty-panel-title">Žádné jízdy</div><div class="empty-panel-text">Spusť první jízdu<br/>a výsledky se uloží zde.</div></div>`;
+    return;
+  }
+  rides.forEach(ride=>{
+    const el=document.createElement('div');
+    el.className=`history-item${S.compareRide?.id===ride.id?' compare-active':''}`;
+    const sectorDots = (ride.sectors||[]).slice(0,8).map((_,i)=>`<div class="hi-s">S${i+1}<br/>${ride.sectors[i]?fmt(ride.sectors[i].time,false):'—'}</div>`).join('');
+    el.innerHTML=`
+      <div class="hi-name">${ride.name}</div>
+      <div class="hi-meta">
+        <span>📅 ${ride.date}</span>
+        <span>🛣️ ${ride.totalKm?.toFixed(1)||'?'} km</span>
+        <span>⏱ ${fmt(ride.totalTime,true)}</span>
+      </div>
+      <div class="hi-sectors">${sectorDots||'<span style="font-size:10px;color:var(--f1-dim)">Bez sektorů</span>'}</div>
+      <div class="hi-actions">
+        <button class="btn-xs btnx-cmp" data-id="${ride.id}">Porovnat</button>
+        <button class="btn-xs btnx-view" data-id="${ride.id}">Zobrazit</button>
+        <button class="btn-xs btnx-del" data-id="${ride.id}">Smazat</button>
+      </div>
+    `;
+    el.querySelector('.btnx-cmp').onclick=e=>{
+      e.stopPropagation();
+      S.compareRide=ride;
+      toast(`🔄 Porovnávám s: ${ride.name}`);
+      renderHistory();
+    };
+    el.querySelector('.btnx-view').onclick=e=>{
+      e.stopPropagation();
+      const completedSectors = (ride.sectors || []).map(sc => ({
+        index: sc.index,
+        time: sc.time,
+        colorClass: sc.colorClass || 'purple',
+        delta: sc.delta !== undefined ? sc.delta : null,
+        prevSec: sc.prevSec !== undefined ? sc.prevSec : null
+      }));
+      const totalGap = (ride.sectors || []).reduce((sum, sc) => sum + (sc.delta || 0), 0);
+      const mockCompareRide = ride.compareRideName ? { name: ride.compareRideName } : (completedSectors.some(s => s.delta !== null) ? { name: 'předchozí' } : null);
+      showResults(ride, completedSectors, mockCompareRide, totalGap, true);
+    };
+    el.querySelector('.btnx-del').onclick=e=>{
+      e.stopPropagation();
+      modal('Smazat jízdu?',`Smazat "${ride.name}"?`,()=>{
+        const arr=getRides().filter(r=>r.id!==ride.id); saveRides(arr);
+        if(S.compareRide?.id===ride.id) S.compareRide=null;
+        renderHistory();
+        toast('🗑 Smazáno');
+      });
+    };
+    el.onclick=()=>{
+      S.compareRide=ride; renderHistory();
+      toast(`Porovnávám s: ${ride.name}`);
+      switchTab('sectors');
+    };
+    list.appendChild(el);
+  });
+}
+
+// ─── SIMULATION ───────────────────────────────────────────
+function runDemo() {
+  if (S.simRunning) { doStop(false); document.getElementById('btn-demo').textContent='⚡ Demo'; return; }
+  if (!S.routePoints.length) { toast('Nejprve nakresli trasu!','toast-red',3000); return; }
+
+  document.getElementById('btn-demo').textContent='⏹ Stop Demo';
+  document.getElementById('setting-ride-name').value = 'Demo '+new Date().toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
+
+  // Simulate GPS by replaying route points
+  S.simRunning = true;
+
+  // Start tracking state (skip geolocation, inject positions manually)
+  // Vybrat srovnávací jízdu pro tuto konkrétní trasu
+  selectComparisonRide();
+
+  S.tracking = true;
+  S.startTime = Date.now();
+  S.sectorStartTime = Date.now();
+  S.lastPos = null;
+  S.projectedKm = 0;
+  S.currentSectorIdx = 0;
+  S.completedSectors = [];
+  S.totalGapSec = 0;
+  currentSectorPoints = [];
+  completedSectorPolylines = [];
+
+  layerTrack.clearLayers();
+  currentSectorPolyline = null;
+
+  document.getElementById('btn-start').style.display='none';
+  document.getElementById('btn-stop').style.display='flex';
+  document.getElementById('btn-setup').disabled=true;
+  document.getElementById('rec-badge').classList.add('active');
+  document.getElementById('gps-dot').className='gps-dot ok';
+  document.getElementById('gps-text').textContent='GPS OK | Demo';
+  document.getElementById('status-dot').className='gps-dot tracking';
+  document.getElementById('status-text').textContent='Demo simulace…';
+
+  buildSectorStrip(); setActiveSectorBox(0); updateRouteInfo();
+  S.uiTimer = setInterval(uiTick, 200);
+
+  const pts = S.routePoints;
+  let i = 0;
+  // Speed simulation: 50-120 km/h
+  const baseInterval = 180; // ms per route point (50m per step at ~50m/0.18s = ~278m/s = ~1000km/h... need to slow down)
+  // At 50m steps and ~80km/h: 50m / (80000/3600) m/s = 2.25s per step
+  // So interval = 2250ms, but we'll speed up 10x for demo
+  const simInterval = 225; // ~10x faster than real
+
+  map.setView(pts[0], 15);
+
+  function step() {
+    if (!S.simRunning || i >= pts.length) {
+      S.simRunning=false;
+      document.getElementById('btn-demo').textContent='⚡ Demo';
+      doStop(true);
+      return;
+    }
+    const newPos = pts[i];
+    S.currentSpeed = 60 + Math.sin(i*0.05)*30 + Math.random()*10;
+
+    if (S.lastPos) {
+      currentSectorPoints.push(newPos);
+      redrawCurrentSector(newPos);
+      S.projectedKm = S.routeDistances[i];
+      const proj = { km:S.routeDistances[i], distFromRoute:0, idx:i };
+      checkSectorBoundary(proj);
+    } else {
+      currentSectorPoints = [newPos];
+    }
+
+    S.lastPos = newPos;
+    updateGpsMarker(newPos);
+    if (i%15===0) map.panTo(newPos,{animate:false});
+    i++;
+    S.simTimer = setTimeout(step, simInterval);
+  }
+  step();
+}
+
+// ─── RESULTS SCREEN ───────────────────────────────────────
+let pendingRideData = null;
+
+function showResults(rideData, completedSectors, compareRide, totalGapSec, isViewing = false) {
+  pendingRideData = isViewing ? null : rideData;
+
+  document.getElementById('res-name').textContent = rideData.name;
+  document.getElementById('res-total-time').textContent = fmt(rideData.totalTime, true);
+  document.getElementById('res-total-km').textContent   = rideData.totalKm.toFixed(1);
+  document.getElementById('res-total-sectors').textContent = completedSectors.length;
+
+  // Compare label
+  document.getElementById('res-compare-label').textContent =
+    compareRide ? `vs. ${compareRide.name}` : 'Bez porovnání';
+
+  // Sector rows
+  const rowsEl = document.getElementById('res-sector-rows');
+  rowsEl.innerHTML = '';
+  completedSectors.forEach(sc => {
+    const cc = sc.colorClass || 'none';
+    const delta = sc.delta;
+    const prevSec = sc.prevSec ?? null;
+
+    const row = document.createElement('div');
+    row.className = 'res-sector-row';
+    row.innerHTML = `
+      <div class="res-sr-bar col-${cc}"></div>
+      <div class="res-sr-body">
+        <div class="res-sr-num">S${sc.index + 1}</div>
+        <div class="res-sr-time col-${cc}">${fmt(sc.time, true)}</div>
+        ${prevSec !== null ? `<div class="res-sr-prev">${fmt(prevSec, true)}</div>` : '<div class="res-sr-prev"></div>'}
+        <div class="res-sr-delta col-${cc}">
+          ${delta !== null
+            ? (delta < 0 ? '' : '+') + delta.toFixed(2) + 's'
+            : '—'}
+        </div>
+      </div>
+    `;
+    rowsEl.appendChild(row);
+  });
+
+  // Total gap
+  const gapRow = document.getElementById('res-gap-row');
+  const gapVal = document.getElementById('res-gap-val');
+  if (compareRide && completedSectors.some(s => s.delta !== null)) {
+    gapRow.style.display = 'flex';
+    const ahead = totalGapSec < -0.1;
+    const behind = totalGapSec > 0.1;
+    const sign = totalGapSec >= 0 ? '+' : '';
+    gapVal.textContent = sign + totalGapSec.toFixed(2) + 's';
+    gapVal.className = `res-gap-val ${ahead ? 'ahead' : behind ? 'behind' : 'same'}`;
+  } else {
+    gapRow.style.display = 'none';
+  }
+
+  // Footer buttons visibility
+  const saveBtn = document.getElementById('res-save');
+  const discardBtn = document.getElementById('res-discard');
+  const closeBtn = document.getElementById('res-close-btn');
+
+  if (isViewing) {
+    if (saveBtn) saveBtn.style.display = 'none';
+    if (discardBtn) discardBtn.style.display = 'none';
+    if (closeBtn) closeBtn.style.display = 'flex';
+  } else {
+    if (saveBtn) saveBtn.style.display = 'flex';
+    if (discardBtn) discardBtn.style.display = 'flex';
+    if (closeBtn) closeBtn.style.display = 'none';
+  }
+
+  // Show overlay with animation
+  const overlay = document.getElementById('results-overlay');
+  overlay.classList.add('open');
+}
+
+function closeResults() {
+  document.getElementById('results-overlay').classList.remove('open');
+  pendingRideData = null;
+}
+
+document.getElementById('res-save').addEventListener('click', () => {
+  if (pendingRideData) {
+    const rides = getRides();
+    rides.push(pendingRideData);
+    saveRides(rides);
+    toast('✓ Jízda uložena', 'toast-green', 2500);
+    renderHistory();
+  }
+  closeResults();
+});
+document.getElementById('res-discard').addEventListener('click', () => {
+  modal('Zahodit jízdu?', 'Data této jízdy se nebudou ukládat.', closeResults);
+});
+document.getElementById('res-close').addEventListener('click', closeResults);
+document.getElementById('res-close-btn').addEventListener('click', closeResults);
+
+// ─── TABS ─────────────────────────────────────────────────
+function switchTab(name) {
+  S.activeTab = name;
+  document.querySelectorAll('.panel-tab').forEach(t=>{
+    t.classList.toggle('active', t.dataset.tab===name);
+  });
+  document.getElementById('tab-sectors').style.display  = name==='sectors'  ? 'flex' : 'none';
+  document.getElementById('tab-routes').style.display   = name==='routes'   ? 'flex' : 'none';
+  document.getElementById('tab-history').style.display  = name==='history'  ? 'flex' : 'none';
+  document.getElementById('tab-settings').style.display = name==='settings' ? 'flex' : 'none';
+  if (name==='history') renderHistory();
+  if (name==='routes') renderSavedRoutes();
+}
+document.querySelectorAll('.panel-tab').forEach(t=>{
+  t.onclick=()=>switchTab(t.dataset.tab);
+});
+
+// ─── SECTOR MODE ──────────────────────────────────────────
+let sectorMode  = 'count';
+let sectorCount = 3;
+
+function applySectorMode() {
+  if (sectorMode === 'count') {
+    SECTOR_KM = S.routeTotalKm > 0 ? S.routeTotalKm / sectorCount : 10;
+  } else {
+    SECTOR_KM = parseInt(document.getElementById('setting-sector-km').value);
+  }
+  if (S.routePoints.length > 0) {
+    S.sectorBoundaries = buildSectors(S.routeDistances, S.routeTotalKm, SECTOR_KM);
+    S.numSectors = sectorMode === 'count' ? sectorCount : S.sectorBoundaries.length + 1;
+    // Redraw sector markers
+    layerSectors.clearLayers();
+    S.sectorBoundaries.forEach((sb, i) => {
+      const pos   = S.routePoints[sb.pointIdx];
+      const color = sectorColors[i % sectorColors.length];
+      const icon  = L.divIcon({
+        html: `<div class="sb-marker" style="background:${color};box-shadow:0 0 12px ${color}88">S${i+2}</div>`,
+        className: '', iconSize: [28,28], iconAnchor: [14,14]
+      });
+      L.marker(pos, {icon}).addTo(layerSectors)
+        .bindPopup(`<div style="font-size:12px;font-weight:700">Hranice S${i+1} → S${i+2}</div><div style="font-size:10px;color:var(--f1-muted);margin-top:4px">@ ${sb.kmAt.toFixed(1)} km</div>`);
+    });
+    const si = L.divIcon({ html:`<div class="f1-start-marker">S</div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+    const fi = L.divIcon({ html:`<div class="f1-finish-marker"></div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+    L.marker(S.routePoints[0], {icon:si}).addTo(layerSectors).bindPopup('START');
+    L.marker(S.routePoints[S.routePoints.length-1], {icon:fi}).addTo(layerSectors).bindPopup('CÍL');
+    updateRouteInfo();
+    buildSectorStrip();
+    updateSectorsList();
+  }
+  saveRouteToStorage();
+}
+
+function setSectorMode(mode) {
+  sectorMode = mode;
+  document.getElementById('sg-count').style.display = mode === 'count' ? 'flex' : 'none';
+  document.getElementById('sg-km').style.display    = mode === 'km'    ? 'flex' : 'none';
+  document.getElementById('smode-count').classList.toggle('smode-active', mode === 'count');
+  document.getElementById('smode-km').classList.toggle('smode-active',    mode === 'km');
+  applySectorMode();
+}
+
+function changeSectorCount(delta) {
+  sectorCount = Math.max(2, Math.min(20, sectorCount + delta));
+  document.getElementById('sector-count-display').textContent = sectorCount;
+  applySectorMode();
+}
+
+// Attach sector mode button listeners (avoid inline onclick scoping issues)
+document.getElementById('smode-count').addEventListener('click', () => setSectorMode('count'));
+document.getElementById('smode-km').addEventListener('click',    () => setSectorMode('km'));
+document.getElementById('scount-minus').addEventListener('click', () => changeSectorCount(-1));
+document.getElementById('scount-plus').addEventListener('click',  () => changeSectorCount(1));
+
+// ─── SETTINGS HANDLERS ────────────────────────────────────
+document.getElementById('setting-sector-km').onchange = function() {
+  if (sectorMode === 'km') applySectorMode();
+  saveRouteToStorage();
+};
+document.getElementById('setting-radius').onchange = function() {
+  DETECT_RADIUS_M = parseInt(this.value);
+  saveSettingsToStorage();
+};
+document.getElementById('setting-compare').onchange = function() {
+  saveSettingsToStorage();
+};
+document.getElementById('setting-ride-name').oninput = function() {
+  saveSettingsToStorage();
+};
+document.getElementById('btn-clear-storage').onclick = ()=>{
+  modal('Smazat vše?','Opravdu smazat všechna uložená data jízd?',()=>{
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('motosektory_route_v3');
+    localStorage.removeItem('motosektory_settings_v3');
+    S.compareRide=null;
+    clearRoute();
+    toast('🗑 Veškerá data smazána','toast-red');
+    renderHistory();
+  });
+};
+
+// ─── BUTTON HANDLERS ──────────────────────────────────────
+document.getElementById('btn-setup').onclick = ()=>{
+  if (S.drawingMode) exitDrawMode();
+  else enterDrawMode();
+};
+document.getElementById('btn-clear-route').onclick = ()=>{
+  modal('Smazat trasu?','Opravdu smazat nakreslenou trasu?',()=>{
+    clearRoute();
+    toast('Trasa smazána');
+  });
+};
+document.getElementById('btn-start').onclick = () => {
+  if (!S.activeRouteName) {
+    const name = prompt("Před spuštěním GPS měření musíte trasu pojmenovat a uložit. Zadejte název trasy:");
+    if (!name || name.trim() === "") {
+      toast("Spuštění zrušeno – trasa musí být uložena", "toast-red");
+      return;
+    }
+    saveSavedRoute(name);
+  }
+  startTracking();
+};
+document.getElementById('btn-stop').onclick  = ()=>stopTracking(true);
+document.getElementById('btn-demo').onclick  = () => {
+  if (!S.activeRouteName) {
+    const name = prompt("Před spuštěním Dema musíte trasu pojmenovat a uložit. Zadejte název trasy:");
+    if (!name || name.trim() === "") {
+      toast("Demo zrušeno – trasa musí být uložena", "toast-red");
+      return;
+    }
+    saveSavedRoute(name);
+  }
+  runDemo();
+};
+
+// MAP CLICK – add waypoint
+map.on('click', e=>{
+  if (S.drawingMode) addWaypoint(e.latlng);
+});
+
+// Double-click to exit draw mode
+map.on('dblclick', e=>{
+  if (S.drawingMode) { e.originalEvent.preventDefault(); exitDrawMode(); }
+});
+
+// ─── ROUTE & SETTINGS STORAGE HELPERS ──────────────────────
+function saveRouteToStorage() {
+  if (S.routePoints.length === 0) return;
+  const routeData = {
+    routeWaypoints: S.routeWaypoints,
+    routePoints: S.routePoints,
+    routeDistances: S.routeDistances,
+    routeTotalKm: S.routeTotalKm,
+    sectorBoundaries: S.sectorBoundaries,
+    numSectors: S.numSectors,
+    sectorMode: sectorMode,
+    sectorCount: sectorCount,
+    SECTOR_KM: SECTOR_KM,
+    activeRouteName: S.activeRouteName
+  };
+  localStorage.setItem('motosektory_route_v3', JSON.stringify(routeData));
+}
+
+// ─── SAVED ROUTES PERSISTENCE & ACTIONS ───────────────────
+function getSavedRoutes() {
+  try { return JSON.parse(localStorage.getItem('motosektory_saved_routes_v3')) || []; }
+  catch { return []; }
+}
+function saveSavedRoutes(arr) {
+  localStorage.setItem('motosektory_saved_routes_v3', JSON.stringify(arr));
+}
+
+function saveSavedRoute(name) {
+  if (!name || name.trim() === '') {
+    toast('Zadej název trasy!', 'toast-red');
+    return;
+  }
+  if (S.routePoints.length === 0) {
+    toast('Nejprve nakresli nebo načti trasu!', 'toast-red');
+    return;
+  }
+  const routes = getSavedRoutes();
+  const id = genId();
+  const route = {
+    id: id,
+    name: name.trim(),
+    routeWaypoints: S.routeWaypoints,
+    routePoints: S.routePoints,
+    routeDistances: S.routeDistances,
+    routeTotalKm: S.routeTotalKm,
+    sectorBoundaries: S.sectorBoundaries,
+    numSectors: S.numSectors,
+    sectorMode: sectorMode,
+    sectorCount: sectorCount,
+    SECTOR_KM: SECTOR_KM
+  };
+  routes.push(route);
+  saveSavedRoutes(routes);
+  S.activeRouteName = route.name;
+  saveRouteToStorage();
+  toast(`✓ Trasa "${route.name}" uložena`, 'toast-green');
+  document.getElementById('setting-route-save-name').value = '';
+  renderSavedRoutes();
+}
+
+function loadSavedRoute(id) {
+  const routes = getSavedRoutes();
+  const route = routes.find(r => r.id === id);
+  if (!route) return;
+
+  clearRoute();
+
+  S.routeWaypoints = route.routeWaypoints || [];
+  S.routePoints = route.routePoints || [];
+  S.routeDistances = route.routeDistances || [];
+  S.routeTotalKm = route.routeTotalKm || 0;
+  S.sectorBoundaries = route.sectorBoundaries || [];
+  S.numSectors = route.numSectors || 0;
+  sectorMode = route.sectorMode || 'count';
+  sectorCount = route.sectorCount || 3;
+  SECTOR_KM = route.SECTOR_KM || 10;
+  S.activeRouteName = route.name;
+
+  // Update UI controls
+  document.getElementById('sector-count-display').textContent = sectorCount;
+  document.getElementById('setting-sector-km').value = SECTOR_KM;
+  document.getElementById('smode-count').classList.toggle('smode-active', sectorMode === 'count');
+  document.getElementById('smode-km').classList.toggle('smode-active', sectorMode === 'km');
+  document.getElementById('sg-count').style.display = sectorMode === 'count' ? 'flex' : 'none';
+  document.getElementById('sg-km').style.display = sectorMode === 'km' ? 'flex' : 'none';
+
+  // Draw route on map with glow layers and corners
+  drawRouteGlow(S.routePoints);
+  drawCorners(S.routePoints);
+
+  layerSectors.clearLayers();
+  S.sectorBoundaries.forEach((sb, i) => {
+    const pos = S.routePoints[sb.pointIdx];
+    const color = sectorColors[i % sectorColors.length];
+    const icon = L.divIcon({
+      html: `<div class="sb-marker" style="background:${color};box-shadow:0 0 12px ${color}88">S${i+2}</div>`,
+      className: '', iconSize: [28,28], iconAnchor: [14,14]
+    });
+    L.marker(pos, {icon}).addTo(layerSectors)
+      .bindPopup(`<div style="font-size:12px;font-weight:700">Hranice S${i+1} → S${i+2}</div><div style="font-size:10px;color:var(--f1-muted);margin-top:4px">@ ${sb.kmAt.toFixed(1)} km</div>`);
+  });
+  const startIcon = L.divIcon({ html:`<div class="f1-start-marker">S</div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+  const finishIcon = L.divIcon({ html:`<div class="f1-finish-marker"></div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+  L.marker(S.routePoints[0], {icon:startIcon}).addTo(layerSectors).bindPopup('START');
+  L.marker(S.routePoints[S.routePoints.length-1], {icon:finishIcon}).addTo(layerSectors).bindPopup('CÍL');
+
+  // Rebuild waypoint markers
+  waypointMarkers = [];
+  S.routeWaypoints.forEach((pos, idx) => {
+    const isFirst = idx === 0;
+    const icon = L.divIcon({
+      html: `<div class="wp-dot${isFirst?' first':''}"></div>`,
+      className:'', iconSize:[10,10], iconAnchor:[5,5]
+    });
+    const m = L.marker(pos, {icon, draggable:true}).addTo(layerRoute);
+    m.on('drag', () => { rebuildRoutePreview(); });
+    m.on('dragend', e => {
+      const i = waypointMarkers.indexOf(m);
+      if (i >= 0) S.routeWaypoints[i] = [e.target.getLatLng().lat, e.target.getLatLng().lng];
+      finalizeRoute();
+    });
+    m.on('contextmenu', () => {
+      const i = waypointMarkers.indexOf(m);
+      if (i >= 0) {
+        S.routeWaypoints.splice(i, 1);
+        waypointMarkers.splice(i, 1);
+        layerRoute.removeLayer(m);
+      }
+      rebuildRoutePreview();
+      finalizeRoute();
+    });
+    waypointMarkers.push(m);
+  });
+
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-clear-route').disabled = false;
+
+  // Fit map
+  map.fitBounds(L.latLngBounds(S.routePoints), { padding: [30, 30] });
+
+  updateRouteInfo();
+  buildSectorStrip();
+  updateSectorsList();
+
+  saveRouteToStorage();
+  renderSavedRoutes();
+  toast(`✓ Trasa "${route.name}" načtena`, 'toast-green');
+}
+
+function deleteSavedRoute(id) {
+  const routes = getSavedRoutes();
+  const route = routes.find(r => r.id === id);
+  if (!route) return;
+
+  modal('Smazat trasu?', `Opravdu smazat trasu "${route.name}"?`, () => {
+    const arr = routes.filter(r => r.id !== id);
+    saveSavedRoutes(arr);
+    if (S.activeRouteName === route.name) {
+      S.activeRouteName = null;
+      saveRouteToStorage();
+    }
+    renderSavedRoutes();
+    toast('🗑 Smazáno');
+  });
+}
+
+function renderSavedRoutes() {
+  const list = document.getElementById('routes-list');
+  list.innerHTML = '';
+  const routes = getSavedRoutes();
+  if (!routes.length) {
+    list.innerHTML = `<div class="empty-panel"><div class="empty-panel-icon">🗺️</div><div class="empty-panel-title">Žádné uložené trasy</div><div class="empty-panel-text">Nakresli nebo vyhledej trasu,<br/>zadej název a ulož si ji.</div></div>`;
+    return;
+  }
+  routes.forEach(route => {
+    const el = document.createElement('div');
+    const isActive = S.activeRouteName === route.name;
+    el.className = `route-item${isActive ? ' active' : ''}`;
+    el.innerHTML = `
+      <div class="ri-name">${route.name}</div>
+      <div class="ri-meta">
+        <span>🛣️ ${route.routeTotalKm?.toFixed(1) || '?'} km</span>
+        <span>⏱️ ${route.numSectors} sektorů</span>
+      </div>
+      <div class="ri-actions">
+        <button class="btn-xs btnx-cmp" data-id="${route.id}" style="background:rgba(0,255,68,0.15);border:1px solid rgba(0,255,68,0.3);color:var(--sector-green)">Načíst</button>
+        <button class="btn-xs btnx-del" data-id="${route.id}">Smazat</button>
+      </div>
+    `;
+    el.querySelector('.btnx-cmp').onclick = e => {
+      e.stopPropagation();
+      loadSavedRoute(route.id);
+    };
+    el.querySelector('.btnx-del').onclick = e => {
+      e.stopPropagation();
+      deleteSavedRoute(route.id);
+    };
+    el.onclick = () => {
+      loadSavedRoute(route.id);
+    };
+    list.appendChild(el);
+  });
+}
+
+// Bind save route action
+document.getElementById('btn-save-route-action').addEventListener('click', () => {
+  const name = document.getElementById('setting-route-save-name').value;
+  saveSavedRoute(name);
+});
+
+function loadRouteFromStorage() {
+  try {
+    const data = JSON.parse(localStorage.getItem('motosektory_route_v3'));
+    if (data && data.routePoints && data.routePoints.length > 0) {
+      S.routeWaypoints = data.routeWaypoints || [];
+      S.routePoints = data.routePoints || [];
+      S.routeDistances = data.routeDistances || [];
+      S.routeTotalKm = data.routeTotalKm || 0;
+      S.sectorBoundaries = data.sectorBoundaries || [];
+      S.numSectors = data.numSectors || 0;
+      sectorMode = data.sectorMode || 'count';
+      sectorCount = data.sectorCount || 3;
+      SECTOR_KM = data.SECTOR_KM || 10;
+      S.activeRouteName = data.activeRouteName || null;
+
+      // Update UI controls
+      document.getElementById('sector-count-display').textContent = sectorCount;
+      document.getElementById('setting-sector-km').value = SECTOR_KM;
+      document.getElementById('smode-count').classList.toggle('smode-active', sectorMode === 'count');
+      document.getElementById('smode-km').classList.toggle('smode-active', sectorMode === 'km');
+      document.getElementById('sg-count').style.display = sectorMode === 'count' ? 'flex' : 'none';
+      document.getElementById('sg-km').style.display = sectorMode === 'km' ? 'flex' : 'none';
+
+      // Draw route on map with glow layers and corners
+      drawRouteGlow(S.routePoints);
+      drawCorners(S.routePoints);
+
+      layerSectors.clearLayers();
+      S.sectorBoundaries.forEach((sb, i) => {
+        const pos = S.routePoints[sb.pointIdx];
+        const color = sectorColors[i % sectorColors.length];
+        const icon = L.divIcon({
+          html: `<div class="sb-marker" style="background:${color};box-shadow:0 0 12px ${color}88">S${i+2}</div>`,
+          className: '', iconSize: [28,28], iconAnchor: [14,14]
+        });
+        L.marker(pos, {icon}).addTo(layerSectors)
+          .bindPopup(`<div style="font-size:12px;font-weight:700">Hranice S${i+1} → S${i+2}</div><div style="font-size:10px;color:var(--f1-muted);margin-top:4px">@ ${sb.kmAt.toFixed(1)} km</div>`);
+      });
+      const startIcon = L.divIcon({ html:`<div class="f1-start-marker">S</div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+      const finishIcon = L.divIcon({ html:`<div class="f1-finish-marker"></div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+      L.marker(S.routePoints[0], {icon:startIcon}).addTo(layerSectors).bindPopup('START');
+      L.marker(S.routePoints[S.routePoints.length-1], {icon:finishIcon}).addTo(layerSectors).bindPopup('CÍL');
+
+      // Rebuild waypoint markers
+      waypointMarkers = [];
+      S.routeWaypoints.forEach((pos, idx) => {
+        const isFirst = idx === 0;
+        const icon = L.divIcon({
+          html: `<div class="wp-dot${isFirst?' first':''}"></div>`,
+          className:'', iconSize:[10,10], iconAnchor:[5,5]
+        });
+        const m = L.marker(pos, {icon, draggable:true}).addTo(layerRoute);
+        m.on('drag', () => { rebuildRoutePreview(); });
+        m.on('dragend', e => {
+          const i = waypointMarkers.indexOf(m);
+          if (i >= 0) S.routeWaypoints[i] = [e.target.getLatLng().lat, e.target.getLatLng().lng];
+          finalizeRoute();
+        });
+        m.on('contextmenu', () => {
+          const i = waypointMarkers.indexOf(m);
+          if (i >= 0) {
+            S.routeWaypoints.splice(i, 1);
+            waypointMarkers.splice(i, 1);
+            layerRoute.removeLayer(m);
+          }
+          rebuildRoutePreview();
+          finalizeRoute();
+        });
+        waypointMarkers.push(m);
+      });
+
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-clear-route').disabled = false;
+
+      // Fit map
+      map.fitBounds(L.latLngBounds(S.routePoints), { padding: [30, 30] });
+
+      updateRouteInfo();
+      buildSectorStrip();
+      updateSectorsList();
+    }
+  } catch (e) {
+    console.error("Error loading route from storage:", e);
+  }
+}
+
+function saveSettingsToStorage() {
+  const settings = {
+    radius: DETECT_RADIUS_M,
+    compare: document.getElementById('setting-compare').value,
+    rideName: document.getElementById('setting-ride-name').value
+  };
+  localStorage.setItem('motosektory_settings_v3', JSON.stringify(settings));
+}
+
+function loadSettingsFromStorage() {
+  try {
+    const data = JSON.parse(localStorage.getItem('motosektory_settings_v3'));
+    if (data) {
+      if (data.radius) {
+        DETECT_RADIUS_M = data.radius;
+        document.getElementById('setting-radius').value = DETECT_RADIUS_M;
+      }
+      if (data.compare) {
+        document.getElementById('setting-compare').value = data.compare;
+      }
+      if (data.rideName) {
+        document.getElementById('setting-ride-name').value = data.rideName;
+      }
+    }
+  } catch (e) {
+    console.error("Error loading settings:", e);
+  }
+}
+
+function checkGpsPermissionAndStart() {
+  if (!navigator.geolocation) {
+    document.getElementById('gps-dot').className = 'gps-dot wait';
+    document.getElementById('gps-text').textContent = 'GPS nepodporováno';
+    document.getElementById('status-text').textContent = 'GPS nepodporováno';
+    return;
+  }
+
+  // Výchozí stav, dokud není GPS aktivována
+  document.getElementById('gps-dot').className = 'gps-dot';
+  document.getElementById('gps-text').textContent = 'GPS neaktivní';
+  document.getElementById('status-dot').className = 'gps-dot';
+  document.getElementById('status-text').textContent = 'Čekám na aktivaci GPS…';
+
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(permissionStatus => {
+      if (permissionStatus.state === 'granted') {
+        startIdleGps();
+      } else {
+        // Nasloucháme změně (pokud uživatel schválí polohu jinde)
+        permissionStatus.onchange = () => {
+          if (permissionStatus.state === 'granted' && idleWatchId === null) {
+            startIdleGps();
+          }
+        };
+      }
+    }).catch(err => {
+      console.log('Permissions API query failed:', err);
+    });
+  } else {
+    // Pro Safari a prohlížeče bez query() použijeme příznak z localStorage
+    const gpsSaved = localStorage.getItem('motosektory_gps_allowed') === 'true';
+    if (gpsSaved) {
+      startIdleGps();
+    }
+  }
+}
+
+// ─── INIT ─────────────────────────────────────────────────
+(function init() {
+  loadSettingsFromStorage();
+  buildSectorStrip();
+  renderHistory();
+  updateRouteInfo();
+  loadRouteFromStorage();
+
+  // Spustíme chytrou kontrolu místo okamžitého vyžádání
+  if (navigator.geolocation) {
+    checkGpsPermissionAndStart();
+  } else {
+    document.getElementById('gps-dot').className = 'gps-dot wait';
+    document.getElementById('gps-text').textContent = 'GPS nepodporováno';
+    document.getElementById('status-text').textContent = 'GPS nepodporováno';
+  }
+})();
+</script>
+</body>
+<script>
+// ╔══════════════════════════════════════════════════════════════════╗
+//  ROUTE PLANNER – Nominatim geocoding + OSRM routing
+// ╚══════════════════════════════════════════════════════════════════╝
+
+const RP = {
+  fromPos: null,   // [lat, lng]
+  toPos:   null,
+  fromName: '',
+  toName:  '',
+  routes:  [],     // array of OSRM route objects
+  selectedIdx: -1,
+  previewLines: [], // Leaflet polylines for preview
+};
+
+// ── Panel open/close ─────────────────────────────────────
+function openPlanner() {
+  document.getElementById('route-planner').classList.add('open');
+  document.getElementById('btn-plan').classList.add('btn-primary');
+  document.getElementById('btn-plan').classList.remove('btn-secondary');
+}
+function closePlanner() {
+  document.getElementById('route-planner').classList.remove('open');
+  document.getElementById('btn-plan').classList.remove('btn-primary');
+  document.getElementById('btn-plan').classList.add('btn-secondary');
+  clearPreviewLines();
+}
+
+document.getElementById('btn-plan').onclick    = () => document.getElementById('route-planner').classList.contains('open') ? closePlanner() : openPlanner();
+document.getElementById('rp-close-btn').onclick = closePlanner;
+
+// ── Geocoding (Nominatim) ────────────────────────────────
+let geocodeTimers = {};
+
+async function geocode(query) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&accept-language=cs,en`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'cs,en' } });
+  return res.json();
+}
+
+async function reverseGeocode(lat, lng) {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=cs,en`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'cs,en' } });
+  return res.json();
+}
+
+function setupSearch(inputId, suggId, onSelect) {
+  const input = document.getElementById(inputId);
+  const sugg  = document.getElementById(suggId);
+
+  input.addEventListener('input', () => {
+    clearTimeout(geocodeTimers[inputId]);
+    const q = input.value.trim();
+    if (q.length < 3) { sugg.classList.remove('open'); sugg.innerHTML=''; return; }
+    geocodeTimers[inputId] = setTimeout(async () => {
+      try {
+        const results = await geocode(q);
+        sugg.innerHTML = '';
+        if (!results.length) { sugg.classList.remove('open'); return; }
+        results.forEach(r => {
+          const div = document.createElement('div');
+          div.className = 'rp-suggestion';
+          const name  = r.name || r.display_name.split(',')[0];
+          const rest  = r.display_name.split(',').slice(1,3).join(',').trim();
+          div.innerHTML = `<div>${name}</div><div class="rp-suggestion-sub">${rest}</div>`;
+          div.onclick = () => {
+            input.value = r.display_name.split(',').slice(0,2).join(',').trim();
+            sugg.classList.remove('open');
+            onSelect({ lat: parseFloat(r.lat), lng: parseFloat(r.lon), name: input.value });
+          };
+          sugg.appendChild(div);
+        });
+        sugg.classList.add('open');
+      } catch { sugg.classList.remove('open'); }
+    }, 400);
+  });
+
+  // Close suggestions on outside click
+  document.addEventListener('click', e => {
+    if (!sugg.contains(e.target) && e.target !== input) sugg.classList.remove('open');
+  });
+}
+
+setupSearch('rp-from', 'rp-from-sugg', sel => {
+  RP.fromPos  = [sel.lat, sel.lng];
+  RP.fromName = sel.name;
+});
+setupSearch('rp-to', 'rp-to-sugg', sel => {
+  RP.toPos  = [sel.lat, sel.lng];
+  RP.toName = sel.name;
+});
+
+// Use my location buttons
+function useMyLocation(inputId, onDone) {
+  if (!currentRealPos) {
+    toast('Získávám GPS polohu...', '', 2000);
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        currentRealPos = [lat, lng];
+
+        if (idleWatchId === null) {
+          startIdleGps();
+        }
+
+        reverseGeocode(lat, lng).then(r => {
+          const name = r.display_name ? r.display_name.split(',').slice(0,2).join(',').trim() : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          document.getElementById(inputId).value = name;
+          onDone({ lat, lng, name });
+        }).catch(() => {
+          const name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+          document.getElementById(inputId).value = name;
+          onDone({ lat, lng, name });
+        });
+      },
+      () => { toast('GPS signál nedostupný', 'toast-red', 3000); },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+    return;
+  }
+  const [lat, lng] = currentRealPos;
+  reverseGeocode(lat, lng).then(r => {
+    const name = r.display_name ? r.display_name.split(',').slice(0,2).join(',').trim() : `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById(inputId).value = name;
+    onDone({ lat, lng, name });
+  }).catch(() => {
+    const name = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    document.getElementById(inputId).value = name;
+    onDone({ lat, lng, name });
+  });
+}
+
+document.getElementById('rp-from-loc').onclick = () => useMyLocation('rp-from', sel => { RP.fromPos = [sel.lat, sel.lng]; RP.fromName = sel.name; });
+document.getElementById('rp-to-loc').onclick   = () => useMyLocation('rp-to',   sel => { RP.toPos   = [sel.lat, sel.lng]; RP.toName   = sel.name; });
+
+// Swap
+document.getElementById('rp-swap').onclick = () => {
+  const fv = document.getElementById('rp-from').value;
+  const tv = document.getElementById('rp-to').value;
+  document.getElementById('rp-from').value = tv;
+  document.getElementById('rp-to').value   = fv;
+  [RP.fromPos, RP.toPos]     = [RP.toPos, RP.fromPos];
+  [RP.fromName, RP.toName]   = [RP.toName, RP.fromName];
+};
+
+// ── OSRM Routing ─────────────────────────────────────────
+async function fetchRoutes(from, to) {
+  // from/to = [lat, lng]
+  const url = `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?alternatives=true&geometries=geojson&overview=full&steps=false`;
+  const res  = await fetch(url);
+  const data = await res.json();
+  if (data.code !== 'Ok' || !data.routes?.length) throw new Error('No routes found');
+  return data.routes; // array of route objects
+}
+
+function fmtDuration(sec) {
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  if (h > 0) return `${h} h ${m} min`;
+  return `${m} min`;
+}
+function fmtDistance(m) {
+  if (m >= 1000) return `${(m/1000).toFixed(1)} km`;
+  return `${Math.round(m)} m`;
+}
+
+function clearPreviewLines() {
+  RP.previewLines.forEach(l => map.removeLayer(l));
+  RP.previewLines = [];
+}
+
+function previewRoute(routeIdx) {
+  clearPreviewLines();
+  const colors = ['#00cfff','#d400ff','#00ff44'];
+  RP.routes.forEach((r, i) => {
+    const pts = r.geometry.coordinates.map(c => [c[1], c[0]]);
+    const line = L.polyline(pts, {
+      color: i === routeIdx ? colors[0] : '#444455',
+      weight: i === routeIdx ? 5 : 3,
+      opacity: i === routeIdx ? 0.85 : 0.4,
+      lineJoin: 'round',
+    }).addTo(map);
+    RP.previewLines.push(line);
+  });
+  // Fit map to selected route
+  const pts = RP.routes[routeIdx].geometry.coordinates.map(c => [c[1], c[0]]);
+  map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
+}
+
+function renderRouteResults(routes) {
+  const container = document.getElementById('rp-results');
+  container.innerHTML = `<div class="rp-results-title">${routes.length} trasa${routes.length>1?'y':''} nalezena${routes.length>1?'':''}:</div>`;
+
+  routes.forEach((r, i) => {
+    const distKm   = r.distance / 1000;
+    const numSect  = Math.floor(distKm / SECTOR_KM);
+    const labels   = ['Nejrychlejší', 'Alternativa 1', 'Alternativa 2'];
+    const card = document.createElement('div');
+    card.className = 'rp-route-card';
+    card.id = `rp-card-${i}`;
+    card.innerHTML = `
+      <div class="rp-rc-top">
+        <div class="rp-rc-num">TRASA ${i+1}</div>
+        <div class="rp-rc-badge">${labels[i] || 'Alternativa'}</div>
+      </div>
+      <div class="rp-rc-stats">
+        <div class="rp-rc-stat">
+          <div class="rp-rc-stat-label">Vzdálenost</div>
+          <div class="rp-rc-stat-val">${fmtDistance(r.distance)}</div>
+        </div>
+        <div class="rp-rc-stat">
+          <div class="rp-rc-stat-label">Čas (auto)</div>
+          <div class="rp-rc-stat-val">${fmtDuration(r.duration)}</div>
+        </div>
+        <div class="rp-rc-stat">
+          <div class="rp-rc-stat-label">Sektorů</div>
+          <div class="rp-rc-stat-val">${numSect > 0 ? numSect : '< 1'}</div>
+        </div>
+      </div>
+      <div class="rp-rc-sectors">Délka sektoru: ${SECTOR_KM < 1.0 ? Math.round(SECTOR_KM * 1000) + ' m' : SECTOR_KM.toFixed(2) + ' km'} · ${distKm.toFixed(1)} km celkem</div>
+    `;
+    card.onclick = () => {
+      document.querySelectorAll('.rp-route-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      RP.selectedIdx = i;
+      previewRoute(i);
+      // Show use button
+      const existing = document.getElementById('rp-use-btn');
+      if (existing) existing.remove();
+      const useBtn = document.createElement('button');
+      useBtn.id = 'rp-use-btn';
+      useBtn.className = 'btn btn-success rp-use-btn';
+      useBtn.textContent = '✓ Použít tuto trasu';
+      useBtn.onclick = (e) => { e.stopPropagation(); loadSelectedRoute(i); };
+      card.appendChild(useBtn);
+    };
+    container.appendChild(card);
+  });
+
+  // Auto-select first
+  document.getElementById('rp-card-0')?.click();
+}
+
+function loadSelectedRoute(idx) {
+  const r = RP.routes[idx];
+  if (!r) return;
+
+  // Convert GeoJSON coords [lng,lat] → [lat,lng]
+  const pts = r.geometry.coordinates.map(c => [c[1], c[0]]);
+
+  // Clear existing route
+  clearRoute();
+  clearPreviewLines();
+
+  // Set route points directly (OSRM gives us dense road-snapped geometry)
+  S.routePoints = pts;
+
+  // Compute cumulative distances
+  const dists = [0];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) {
+    total += haversine(pts[i-1], pts[i]);
+    dists.push(total);
+  }
+  S.routeDistances = dists;
+  S.routeTotalKm   = total;
+  S.routeWaypoints = [pts[0], pts[pts.length-1]]; // just endpoints for reference
+
+  // Build sectors
+  S.sectorBoundaries = buildSectors(dists, total, SECTOR_KM);
+  S.numSectors = S.sectorBoundaries.length + 1;
+
+  // Draw route on map with glow layers and corners
+  drawRouteGlow(pts);
+  drawCorners(pts);
+
+  // Draw sector boundaries
+  layerSectors.clearLayers();
+  S.sectorBoundaries.forEach((sb, i) => {
+    const pos   = pts[sb.pointIdx];
+    const color = sectorColors[i % sectorColors.length];
+    const icon  = L.divIcon({
+      html: `<div class="sb-marker" style="background:${color};box-shadow:0 0 12px ${color}88">S${i+2}</div>`,
+      className: '', iconSize: [28,28], iconAnchor: [14,14]
+    });
+    L.marker(pos, {icon}).addTo(layerSectors)
+      .bindPopup(`<div style="font-size:12px;font-weight:700">Hranice S${i+1} → S${i+2}</div><div style="font-size:10px;color:var(--f1-muted);margin-top:4px">@ ${sb.kmAt.toFixed(1)} km</div>`);
+  });
+  const startIcon = L.divIcon({ html:`<div class="f1-start-marker">S</div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+  const finishIcon = L.divIcon({ html:`<div class="f1-finish-marker"></div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] });
+  L.marker(pts[0], {icon:startIcon}).addTo(layerSectors).bindPopup('START');
+  L.marker(pts[pts.length-1], {icon:finishIcon}).addTo(layerSectors).bindPopup('CÍL');
+
+  // Enable start
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-clear-route').disabled = false;
+
+  // Fit map
+  map.fitBounds(L.latLngBounds(pts), { padding: [30, 30] });
+
+  updateRouteInfo();
+  buildSectorStrip();
+  updateSectorsList();
+
+  closePlanner();
+  toast(`✓ Trasa načtena – ${total.toFixed(1)} km, ${S.numSectors} sektorů`, 'toast-green', 3500);
+  
+  saveRouteToStorage();
+}
+
+// ── Search button ─────────────────────────────────────────
+document.getElementById('rp-search-btn').onclick = async () => {
+  // Try to parse from input if pos not set
+  const fromInput = document.getElementById('rp-from').value.trim();
+  const toInput   = document.getElementById('rp-to').value.trim();
+
+  if (!RP.fromPos && fromInput.length > 2) {
+    try {
+      const r = await geocode(fromInput);
+      if (r[0]) { RP.fromPos = [parseFloat(r[0].lat), parseFloat(r[0].lon)]; }
+    } catch {}
+  }
+  if (!RP.toPos && toInput.length > 2) {
+    try {
+      const r = await geocode(toInput);
+      if (r[0]) { RP.toPos = [parseFloat(r[0].lat), parseFloat(r[0].lon)]; }
+    } catch {}
+  }
+
+  if (!RP.fromPos) { toast('Zadej startovní místo', 'toast-red', 3000); return; }
+  if (!RP.toPos)   { toast('Zadej cíl', 'toast-red', 3000); return; }
+
+  const results = document.getElementById('rp-results');
+  results.innerHTML = `<div class="rp-loading"><div class="rp-spinner"></div>Hledám trasy…</div>`;
+
+  try {
+    const routes = await fetchRoutes(RP.fromPos, RP.toPos);
+    RP.routes = routes;
+    RP.selectedIdx = -1;
+    renderRouteResults(routes);
+  } catch (err) {
+    console.error(err);
+    results.innerHTML = `<div class="rp-error">Trasu se nepodařilo najít.<br/>Zkontroluj připojení.</div>`;
+  }
+};
+
+// Also allow Enter key in inputs
+['rp-from','rp-to'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('rp-search-btn').click();
+  });
+});
+</script>
+</html>
