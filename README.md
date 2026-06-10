@@ -3,7 +3,7 @@
 **MotoSektory** je prémiová webová aplikace pro GPS měření sektorů a telemetrii pro motorkáře a okruhové jezdce. Vzhled a rozhraní jsou kompletně inspirovány grafikou přenosů **Formula 1** (časomíra, barevné sektory, delta časy, karbonové detaily a neonové záře).
 
 Aplikace funguje čistě v prohlížeči (frontend) bez nutnosti instalovat složité servery nebo databáze, což umožňuje bezplatné hostování přímo na **GitHub Pages** a snadné používání na mobilním telefonu venku na trati.
-
+Web: [https://filipczaban.github.io/S/](https://filipczaban.github.io/S/)
 ---
 
 ## 🚀 Hlavní Funkce
